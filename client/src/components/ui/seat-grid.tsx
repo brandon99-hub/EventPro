@@ -53,45 +53,49 @@ export function SeatGrid({
   };
 
   return (
-    <div className="flex flex-col items-center space-y-8">
+    <div className="flex flex-col items-center space-y-8 w-full">
       <div className="w-64 h-8 bg-primary rounded-t-lg flex items-center justify-center text-white text-sm">
         STAGE
       </div>
 
-      <div className="grid grid-cols-10 gap-2">
-        {rows.map((row) => (
-          seatsPerRow[row].map((seat) => (
-            <button
-              key={`${seat.row}-${seat.number}`}
-              className={cn(
-                "w-8 h-8 rounded-md flex items-center justify-center text-xs font-medium",
-                isSeatBooked(seat) 
-                  ? "bg-slate-400 cursor-not-allowed" 
-                  : isSeatSelected(seat)
-                    ? "bg-primary/20 border border-primary text-primary hover:bg-primary/30"
-                    : "bg-slate-200 text-slate-800 hover:bg-primary/20"
-              )}
-              onClick={() => handleSeatClick(seat)}
-              disabled={isSeatBooked(seat)}
-            >
-              {seat.row}{seat.number}
-            </button>
-          ))
-        ))}
+      <div className="overflow-x-auto w-full">
+        <div className="grid grid-cols-10 gap-2 min-w-max">
+          {rows.map((row) => (
+            seatsPerRow[row].map((seat) => (
+              <button
+                key={`${seat.row}-${seat.number}`}
+                className={cn(
+                  "rounded-md flex items-center justify-center text-xs font-medium transition-colors duration-150",
+                  "w-11 h-11 sm:w-8 sm:h-8", // 44px for mobile, 32px for sm+
+                  isSeatBooked(seat) 
+                    ? "bg-slate-400 cursor-not-allowed" 
+                    : isSeatSelected(seat)
+                      ? "bg-primary/20 border border-primary text-primary hover:bg-primary/30"
+                      : "bg-slate-200 text-slate-800 hover:bg-primary/20"
+                )}
+                onClick={() => handleSeatClick(seat)}
+                disabled={isSeatBooked(seat)}
+                style={{ minWidth: 44, minHeight: 44 }}
+              >
+                {seat.row}{seat.number}
+              </button>
+            ))
+          ))}
+        </div>
       </div>
 
-      <div className="flex justify-center gap-8">
+      <div className="flex flex-col sm:flex-row justify-center gap-4 sm:gap-8 w-full items-center">
         <div className="flex items-center">
           <div className="w-4 h-4 bg-slate-200 rounded mr-2"></div>
-          <span className="text-sm text-slate-600">Available</span>
+          <span className="text-xs sm:text-sm text-slate-600">Available</span>
         </div>
         <div className="flex items-center">
           <div className="w-4 h-4 bg-primary/20 border border-primary rounded mr-2"></div>
-          <span className="text-sm text-slate-600">Selected</span>
+          <span className="text-xs sm:text-sm text-slate-600">Selected</span>
         </div>
         <div className="flex items-center">
           <div className="w-4 h-4 bg-slate-400 rounded mr-2"></div>
-          <span className="text-sm text-slate-600">Taken</span>
+          <span className="text-xs sm:text-sm text-slate-600">Taken</span>
         </div>
       </div>
     </div>

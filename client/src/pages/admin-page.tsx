@@ -1,4 +1,4 @@
-import { useState } from "react";
+import { useState, useEffect } from "react";
 import { useQuery, useMutation } from "@tanstack/react-query";
 import { useAuth } from "@/hooks/use-auth";
 import { useLocation } from "wouter";
@@ -19,7 +19,8 @@ import {
   CheckIcon,
   AlertTriangleIcon,
   SearchIcon,
-  Loader2
+  Loader2,
+  MenuIcon
 } from "lucide-react";
 import { Link } from "wouter";
 import { Button } from "@/components/ui/button";
@@ -67,16 +68,28 @@ import { toast } from "@/hooks/use-toast";
 import { insertEventSchema, Event, Category, Booking, Seat, InsertEvent } from "@shared/schema";
 import { format } from "date-fns";
 import { apiRequest, queryClient } from "@/lib/queryClient";
+import { DateRange } from "react-day-picker";
+import { addDays, isAfter, isBefore, isSameDay } from "date-fns";
+import { Badge } from "@/components/ui/badge";
+import { Sheet, SheetContent, SheetTrigger } from "@/components/ui/sheet";
 
 // Extend the event schema for the form
-const eventFormSchema = insertEventSchema.extend({
-  date: z.string(),
+const eventFormSchema = z.object({
+  title: z.string().min(1, "Title is required"),
+  description: z.string().min(1, "Description is required"),
+  imageUrl: z.string().min(1, "Image is required").refine(
+    val => val.startsWith("http") || val.startsWith("data:image/"),
+    { message: "Must be a valid image URL or uploaded image." }
+  ),
+  date: z.string().min(1, "Date is required"),
   endDate: z.string().optional(),
-  categoryId: z.string().transform(val => parseInt(val)),
-  price: z.string().transform(val => parseFloat(val)),
-  maxPrice: z.string().optional().transform(val => val ? parseFloat(val) : undefined),
-  totalSeats: z.string().transform(val => parseInt(val)),
-  availableSeats: z.string().transform(val => parseInt(val)),
+  venue: z.string().min(1, "Venue is required"),
+  price: z.string().min(1, "Price is required"),
+  maxPrice: z.string().optional(),
+  totalSeats: z.string().min(1, "Total seats is required"),
+  availableSeats: z.string().min(1, "Available seats is required"),
+  categoryId: z.string().min(1, "Category is required"),
+  isFeatured: z.boolean().default(false)
 });
 
 type EventFormValues = z.infer<typeof eventFormSchema>;
@@ -89,6 +102,14 @@ export default function AdminPage() {
   const [isDeleteDialogOpen, setIsDeleteDialogOpen] = useState(false);
   const [selectedEventId, setSelectedEventId] = useState<number | null>(null);
   const [searchQuery, setSearchQuery] = useState("");
+  const [selectedImage, setSelectedImage] = useState<File | null>(null);
+  const [imagePreview, setImagePreview] = useState<string>("");
+  const [editEvent, setEditEvent] = useState<Event | null>(null);
+  const [isEditEventDialogOpen, setIsEditEventDialogOpen] = useState(false);
+  const [filterCategory, setFilterCategory] = useState<string>("all");
+  const [filterStatus, setFilterStatus] = useState<string>("all");
+  const [filterDateRange, setFilterDateRange] = useState<{ from: Date | undefined; to: Date | undefined }>({ from: undefined, to: undefined });
+  const [mobileNavOpen, setMobileNavOpen] = useState(false);
 
   // Redirect if not an admin
   if (user && !user.isAdmin) {
@@ -118,12 +139,11 @@ export default function AdminPage() {
       imageUrl: "",
       date: "",
       endDate: "",
-      location: "",
       venue: "",
       price: "",
       maxPrice: "",
-      totalSeats: "",
-      availableSeats: "",
+      totalSeats: "100",
+      availableSeats: "100",
       categoryId: "",
       isFeatured: false
     },
@@ -175,15 +195,49 @@ export default function AdminPage() {
     },
   });
 
+  // Edit event mutation
+  const updateEventMutation = useMutation({
+    mutationFn: async (data: InsertEvent & { id: number }) => {
+      const res = await apiRequest("PUT", `/api/events/${data.id}`, data);
+      return await res.json();
+    },
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ["/api/events"] });
+      setIsEditEventDialogOpen(false);
+      setEditEvent(null);
+      toast({
+        title: "Event updated",
+        description: "The event has been successfully updated.",
+      });
+    },
+    onError: (error) => {
+      toast({
+        title: "Failed to update event",
+        description: error.message,
+        variant: "destructive",
+      });
+    },
+  });
+
   // Submit event form
   const onSubmit = (values: EventFormValues) => {
     if (!user) return;
 
     const eventData: InsertEvent = {
-      ...values,
+      title: values.title,
+      description: values.description,
+      imageUrl: values.imageUrl,
+      location: "Daystar University", // Hardcoded location
+      venue: values.venue,
+      price: parseFloat(values.price),
+      maxPrice: values.maxPrice ? parseFloat(values.maxPrice) : undefined,
+      totalSeats: parseInt(values.totalSeats),
+      availableSeats: parseInt(values.availableSeats),
+      categoryId: parseInt(values.categoryId),
       createdBy: user.id,
       date: new Date(values.date),
-      endDate: values.endDate ? new Date(values.endDate) : undefined
+      endDate: values.endDate ? new Date(values.endDate) : undefined,
+      isFeatured: values.isFeatured
     };
 
     createEventMutation.mutate(eventData);
@@ -201,12 +255,75 @@ export default function AdminPage() {
     }
   };
 
-  // Filter events by search query
-  const filteredEvents = events.filter(event => 
-    event.title.toLowerCase().includes(searchQuery.toLowerCase()) ||
-    event.location.toLowerCase().includes(searchQuery.toLowerCase()) ||
-    event.venue.toLowerCase().includes(searchQuery.toLowerCase())
-  );
+  // Handle image selection
+  const handleImageSelect = (event: React.ChangeEvent<HTMLInputElement>) => {
+    const file = event.target.files?.[0];
+    if (file) {
+      setSelectedImage(file);
+      const reader = new FileReader();
+      reader.onload = (e) => {
+        const result = e.target?.result as string;
+        setImagePreview(result);
+        form.setValue("imageUrl", result);
+      };
+      reader.readAsDataURL(file);
+    }
+  };
+
+  // When editEvent changes, update the form values
+  useEffect(() => {
+    if (editEvent) {
+      form.reset({
+        title: editEvent.title,
+        description: editEvent.description,
+        imageUrl: editEvent.imageUrl,
+        date: editEvent.date ? new Date(editEvent.date).toISOString().slice(0, 16) : "",
+        endDate: editEvent.endDate ? new Date(editEvent.endDate).toISOString().slice(0, 16) : "",
+        venue: editEvent.venue,
+        price: editEvent.price.toString(),
+        maxPrice: editEvent.maxPrice ? editEvent.maxPrice.toString() : "",
+        totalSeats: editEvent.totalSeats.toString(),
+        availableSeats: editEvent.availableSeats.toString(),
+        categoryId: editEvent.categoryId.toString(),
+        isFeatured: editEvent.isFeatured,
+      });
+    }
+  }, [editEvent]);
+
+  // Advanced filtering logic
+  const filteredEvents = events.filter(event => {
+    // Search filter
+    if (
+      searchQuery &&
+      !event.title.toLowerCase().includes(searchQuery.toLowerCase()) &&
+      !event.venue.toLowerCase().includes(searchQuery.toLowerCase())
+    ) {
+      return false;
+    }
+    // Category filter
+    if (filterCategory !== "all" && event.categoryId.toString() !== filterCategory) {
+      return false;
+    }
+    // Status filter
+    const now = new Date();
+    if (filterStatus === "upcoming" && !(new Date(event.date) > now)) {
+      return false;
+    }
+    if (filterStatus === "past" && !(new Date(event.date) <= now)) {
+      return false;
+    }
+    if (filterStatus === "soldout" && event.availableSeats > 0) {
+      return false;
+    }
+    // Date range filter
+    if (filterDateRange.from && isBefore(new Date(event.date), filterDateRange.from)) {
+      return false;
+    }
+    if (filterDateRange.to && isAfter(new Date(event.date), addDays(filterDateRange.to, 1))) {
+      return false;
+    }
+    return true;
+  });
 
   // Loading state
   if (eventsLoading || categoriesLoading || bookingsLoading) {
@@ -219,15 +336,84 @@ export default function AdminPage() {
 
   return (
     <div className="min-h-screen flex bg-slate-50">
-      {/* Sidebar */}
-      <div className="w-64 bg-slate-800 text-white flex flex-col">
+      {/* Mobile Sidebar Drawer */}
+      <Sheet open={mobileNavOpen} onOpenChange={setMobileNavOpen}>
+        <SheetTrigger asChild>
+          <button className="md:hidden p-3 focus:outline-none" onClick={() => setMobileNavOpen(true)}>
+            <MenuIcon className="h-7 w-7 text-slate-800" />
+            <span className="sr-only">Open admin navigation</span>
+          </button>
+        </SheetTrigger>
+        <SheetContent side="left" className="w-64 p-0">
+          <div className="bg-slate-800 text-white h-full flex flex-col">
+            <div className="p-4 flex items-center border-b border-slate-700">
+              <Link href="/" onClick={() => setMobileNavOpen(false)}>
+                <span className="text-xl font-bold cursor-pointer">EventHub</span>
+              </Link>
+              <span className="ml-2 bg-primary text-white text-xs rounded px-2 py-1">Admin</span>
+            </div>
+            <div className="flex-1 py-8 px-4">
+              <nav className="space-y-2">
+                <button 
+                  className={`w-full flex items-center text-left py-2 px-4 rounded ${activeTab === "dashboard" ? "bg-slate-700" : "hover:bg-slate-700"}`}
+                  onClick={() => { setActiveTab("dashboard"); setMobileNavOpen(false); }}
+                >
+                  <HomeIcon className="h-5 w-5 mr-3" />
+                  Dashboard
+                </button>
+                <button 
+                  className={`w-full flex items-center text-left py-2 px-4 rounded ${activeTab === "events" ? "bg-slate-700" : "hover:bg-slate-700"}`}
+                  onClick={() => { setActiveTab("events"); setMobileNavOpen(false); }}
+                >
+                  <Calendar className="h-5 w-5 mr-3" />
+                  Events
+                </button>
+                <button 
+                  className={`w-full flex items-center text-left py-2 px-4 rounded ${activeTab === "bookings" ? "bg-slate-700" : "hover:bg-slate-700"}`}
+                  onClick={() => { setActiveTab("bookings"); setMobileNavOpen(false); }}
+                >
+                  <TicketIcon className="h-5 w-5 mr-3" />
+                  Bookings
+                </button>
+                <button 
+                  className={`w-full flex items-center text-left py-2 px-4 rounded ${activeTab === "users" ? "bg-slate-700" : "hover:bg-slate-700"}`}
+                  onClick={() => { setActiveTab("users"); setMobileNavOpen(false); }}
+                >
+                  <Users className="h-5 w-5 mr-3" />
+                  Users
+                </button>
+              </nav>
+            </div>
+            <div className="p-4 border-t border-slate-700">
+              <div className="flex items-center">
+                <img 
+                  className="h-8 w-8 rounded-full"
+                  src={`https://ui-avatars.com/api/?name=${encodeURIComponent(user?.fullName || '')}&background=random`}
+                  alt={user?.fullName}
+                />
+                <div className="ml-3 flex-1">
+                  <p className="text-sm font-medium truncate">{user?.fullName}</p>
+                  <p className="text-xs text-slate-400 truncate">{user?.email}</p>
+                </div>
+                <button 
+                  className="text-slate-400 hover:text-white"
+                  onClick={() => { setMobileNavOpen(false); logoutMutation.mutate(); }}
+                >
+                  <LogOut className="h-5 w-5" />
+                </button>
+              </div>
+            </div>
+          </div>
+        </SheetContent>
+      </Sheet>
+      {/* Desktop Sidebar */}
+      <div className="hidden md:flex w-64 bg-slate-800 text-white flex-col">
         <div className="p-4 flex items-center border-b border-slate-700">
           <Link href="/">
             <span className="text-xl font-bold cursor-pointer">EventHub</span>
           </Link>
           <span className="ml-2 bg-primary text-white text-xs rounded px-2 py-1">Admin</span>
         </div>
-        
         <div className="flex-1 py-8 px-4">
           <nav className="space-y-2">
             <button 
@@ -237,7 +423,6 @@ export default function AdminPage() {
               <HomeIcon className="h-5 w-5 mr-3" />
               Dashboard
             </button>
-            
             <button 
               className={`w-full flex items-center text-left py-2 px-4 rounded ${activeTab === "events" ? "bg-slate-700" : "hover:bg-slate-700"}`}
               onClick={() => setActiveTab("events")}
@@ -245,7 +430,6 @@ export default function AdminPage() {
               <Calendar className="h-5 w-5 mr-3" />
               Events
             </button>
-            
             <button 
               className={`w-full flex items-center text-left py-2 px-4 rounded ${activeTab === "bookings" ? "bg-slate-700" : "hover:bg-slate-700"}`}
               onClick={() => setActiveTab("bookings")}
@@ -253,7 +437,6 @@ export default function AdminPage() {
               <TicketIcon className="h-5 w-5 mr-3" />
               Bookings
             </button>
-            
             <button 
               className={`w-full flex items-center text-left py-2 px-4 rounded ${activeTab === "users" ? "bg-slate-700" : "hover:bg-slate-700"}`}
               onClick={() => setActiveTab("users")}
@@ -263,7 +446,6 @@ export default function AdminPage() {
             </button>
           </nav>
         </div>
-        
         <div className="p-4 border-t border-slate-700">
           <div className="flex items-center">
             <img 
@@ -284,11 +466,10 @@ export default function AdminPage() {
           </div>
         </div>
       </div>
-
       {/* Main Content */}
-      <div className="flex-1 overflow-auto">
-        <header className="bg-white shadow">
-          <div className="py-4 px-6">
+      <div className="flex-1 overflow-auto w-full">
+        <header className="bg-white shadow flex items-center px-2 sm:px-6">
+          <div className="flex-1 py-4">
             <h1 className="text-2xl font-bold text-slate-900">
               {activeTab === "dashboard" && "Admin Dashboard"}
               {activeTab === "events" && "Manage Events"}
@@ -297,8 +478,7 @@ export default function AdminPage() {
             </h1>
           </div>
         </header>
-
-        <main className="p-6">
+        <main className="p-2 sm:p-6">
           <Tabs value={activeTab} onValueChange={setActiveTab}>
             <TabsContent value="dashboard">
               <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-6 mb-8">
@@ -376,7 +556,7 @@ export default function AdminPage() {
                             <div>
                               <p className="font-medium">{event?.title || "Unknown Event"}</p>
                               <p className="text-sm text-slate-500">
-                                User ID: {booking.userId} • {booking.seatIds.split(',').length} tickets
+                                {booking.buyerName} • {booking.ticketQuantity} tickets
                               </p>
                             </div>
                             <div className="text-right">
@@ -446,26 +626,83 @@ export default function AdminPage() {
             </TabsContent>
             
             <TabsContent value="events">
-              <div className="flex justify-between items-center mb-6">
-                <div className="relative w-64">
+              {/* Mobile Responsive Filter Controls */}
+              <div className="space-y-4 mb-6">
+                {/* Search Bar - Full width on mobile */}
+                <div className="relative w-full">
                   <SearchIcon className="absolute left-3 top-1/2 transform -translate-y-1/2 text-slate-400 h-4 w-4" />
                   <Input 
                     placeholder="Search events..." 
-                    className="pl-10"
+                    className="pl-10 h-12"
                     value={searchQuery}
                     onChange={(e) => setSearchQuery(e.target.value)}
                   />
                 </div>
-                <div className="space-x-2">
-                  <Button onClick={() => setIsAddEventDialogOpen(true)}>
+                
+                {/* Filter Controls - Stack vertically on mobile */}
+                <div className="flex flex-col sm:flex-row gap-3 sm:gap-4 sm:items-center">
+                  {/* Category Filter */}
+                  <Select value={filterCategory} onValueChange={setFilterCategory}>
+                    <SelectTrigger className="w-full sm:w-40 h-12">
+                      <SelectValue placeholder="All Categories" />
+                    </SelectTrigger>
+                    <SelectContent>
+                      <SelectItem value="all">All Categories</SelectItem>
+                      {categories.map(category => (
+                        <SelectItem key={category.id} value={category.id.toString()}>{category.name}</SelectItem>
+                      ))}
+                    </SelectContent>
+                  </Select>
+                  
+                  {/* Status Filter */}
+                  <Select value={filterStatus} onValueChange={setFilterStatus}>
+                    <SelectTrigger className="w-full sm:w-36 h-12">
+                      <SelectValue />
+                    </SelectTrigger>
+                    <SelectContent>
+                      <SelectItem value="all">All Statuses</SelectItem>
+                      <SelectItem value="upcoming">Upcoming</SelectItem>
+                      <SelectItem value="past">Past</SelectItem>
+                      <SelectItem value="soldout">Sold Out</SelectItem>
+                    </SelectContent>
+                  </Select>
+                  
+                  {/* Date Range Filter - Stack vertically on mobile */}
+                  <div className="flex flex-col sm:flex-row gap-2 sm:items-center">
+                    <span className="text-sm text-slate-600 hidden sm:block">Date:</span>
+                    <div className="flex flex-col sm:flex-row gap-2">
+                    <Input
+                      type="date"
+                      value={filterDateRange.from ? filterDateRange.from.toISOString().slice(0, 10) : ""}
+                      onChange={e => setFilterDateRange(r => ({ ...r, from: e.target.value ? new Date(e.target.value) : undefined }))}
+                        className="w-full sm:w-36 h-12"
+                        placeholder="From date"
+                    />
+                      <span className="text-slate-400 hidden sm:block">-</span>
+                    <Input
+                      type="date"
+                      value={filterDateRange.to ? filterDateRange.to.toISOString().slice(0, 10) : ""}
+                      onChange={e => setFilterDateRange(r => ({ ...r, to: e.target.value ? new Date(e.target.value) : undefined }))}
+                        className="w-full sm:w-36 h-12"
+                        placeholder="To date"
+                    />
+                  </div>
+                </div>
+                </div>
+                
+                {/* Add Event Button */}
+                <div className="flex justify-end">
+                  <Button onClick={() => setIsAddEventDialogOpen(true)} className="h-12 px-6">
                     <PlusIcon className="h-4 w-4 mr-2" />
                     Add Event
                   </Button>
                 </div>
               </div>
               
+              {/* Events List - Responsive Layout */}
               <div className="bg-white rounded-md shadow">
-                <div className="grid grid-cols-12 gap-2 p-4 font-medium text-slate-500 border-b">
+                {/* Desktop Table Header */}
+                <div className="hidden md:grid grid-cols-12 gap-2 p-4 font-medium text-slate-500 border-b">
                   <div className="col-span-5">Event Name</div>
                   <div className="col-span-2">Date</div>
                   <div className="col-span-2">Category</div>
@@ -482,12 +719,96 @@ export default function AdminPage() {
                       <p className="text-slate-500 mb-4">
                         {searchQuery ? "Try a different search term" : "You haven't created any events yet"}
                       </p>
-                      <Button onClick={() => setIsAddEventDialogOpen(true)}>
+                      <Button onClick={() => setIsAddEventDialogOpen(true)} className="h-12 px-6">
                         Create Event
                       </Button>
                     </div>
                   ) : (
                     <div>
+                      {/* Mobile Card Layout */}
+                      <div className="md:hidden space-y-4 p-4">
+                        {filteredEvents.map(event => {
+                          const category = categories.find(c => c.id === event.categoryId);
+                          return (
+                            <Card key={event.id} className="overflow-hidden">
+                              <div className="flex items-start p-4">
+                                <div className="w-16 h-16 rounded overflow-hidden mr-4 flex-shrink-0">
+                                  <img src={event.imageUrl} alt={event.title} className="w-full h-full object-cover" />
+                                </div>
+                                <div className="flex-1 min-w-0">
+                                  <div className="flex items-start justify-between mb-2">
+                                    <h3 className="font-medium text-slate-900 truncate flex-1 mr-2">
+                                      {event.title}
+                                    </h3>
+                                    <div className="flex space-x-1">
+                                      <Button 
+                                        variant="ghost" 
+                                        size="icon" 
+                                        className="h-10 w-10"
+                                        onClick={() => handleDeleteEvent(event.id)}
+                                      >
+                                        <TrashIcon className="h-4 w-4 text-slate-500" />
+                                      </Button>
+                                      <Button 
+                                        variant="ghost" 
+                                        size="icon" 
+                                        className="h-10 w-10"
+                                        onClick={() => {
+                                          setEditEvent(event);
+                                          setIsEditEventDialogOpen(true);
+                                        }}
+                                      >
+                                        <PencilIcon className="h-4 w-4 text-slate-500" />
+                                      </Button>
+                                    </div>
+                                  </div>
+                                  <p className="text-sm text-slate-500 mb-2">{event.venue}, {event.location}</p>
+                                  <div className="flex items-center gap-2 mb-2">
+                                    <span className="text-sm">
+                                      {format(new Date(event.date), "MMM d, yyyy 'at' h:mm a")}
+                                    </span>
+                                  </div>
+                                  <div className="flex items-center gap-2 mb-2">
+                                    <span 
+                                      className="inline-block rounded-full px-2 py-0.5 text-xs text-white"
+                                      style={{ backgroundColor: category?.color || "#6366F1" }}
+                                    >
+                                      {category?.name || "Unknown"}
+                                    </span>
+                                    {event.isFeatured && (
+                                      <span className="bg-amber-100 text-amber-800 text-xs rounded px-1.5 py-0.5">
+                                        Featured
+                                      </span>
+                                    )}
+                                    {event.availableSeats === 0 && (
+                                      <span className="bg-red-600 text-white text-xs rounded px-1.5 py-0.5">
+                                        Sold Out
+                                      </span>
+                                    )}
+                                    {new Date(event.date) < new Date() && (
+                                      <span className="bg-slate-500 text-white text-xs rounded px-1.5 py-0.5">
+                                        Past
+                                      </span>
+                                    )}
+                                  </div>
+                                  <div className="flex items-center justify-between text-sm">
+                                    <span className="font-medium">
+                                      Ksh{event.price}
+                                      {event.maxPrice && ` - Ksh${event.maxPrice}`}
+                                    </span>
+                                    <span className="text-slate-500">
+                                      {event.availableSeats}/{event.totalSeats} available
+                                    </span>
+                                  </div>
+                                </div>
+                              </div>
+                            </Card>
+                          );
+                        })}
+                      </div>
+                      
+                      {/* Desktop Table Layout */}
+                      <div className="hidden md:block">
                       {filteredEvents.map(event => {
                         const category = categories.find(c => c.id === event.categoryId);
                         return (
@@ -500,7 +821,16 @@ export default function AdminPage() {
                                 <img src={event.imageUrl} alt={event.title} className="w-full h-full object-cover" />
                               </div>
                               <div>
-                                <h3 className="font-medium text-slate-900 truncate">{event.title}</h3>
+                                <h3 className="font-medium text-slate-900 truncate flex items-center gap-2">
+                                  {event.title}
+                                  {/* Status Badges */}
+                                  {event.availableSeats === 0 && (
+                                    <Badge className="bg-red-600 text-white font-bold ml-2">Sold Out</Badge>
+                                  )}
+                                  {new Date(event.date) < new Date() && (
+                                    <Badge className="bg-slate-500 text-white font-bold ml-2">Past</Badge>
+                                  )}
+                                </h3>
                                 <p className="text-sm text-slate-500 truncate">{event.venue}, {event.location}</p>
                               </div>
                             </div>
@@ -521,8 +851,8 @@ export default function AdminPage() {
                               )}
                             </div>
                             <div className="col-span-1 text-sm">
-                              ${event.price}
-                              {event.maxPrice && ` - $${event.maxPrice}`}
+                              Ksh{event.price}
+                              {event.maxPrice && ` - Ksh${event.maxPrice}`}
                             </div>
                             <div className="col-span-1 text-sm">
                               {event.availableSeats}/{event.totalSeats}
@@ -536,15 +866,22 @@ export default function AdminPage() {
                               >
                                 <TrashIcon className="h-4 w-4 text-slate-500" />
                               </Button>
-                              <Link href={`/events/${event.id}`}>
-                                <Button variant="ghost" size="icon" className="h-8 w-8">
+                              <Button 
+                                variant="ghost" 
+                                size="icon" 
+                                className="h-8 w-8"
+                                onClick={() => {
+                                  setEditEvent(event);
+                                  setIsEditEventDialogOpen(true);
+                                }}
+                              >
                                   <PencilIcon className="h-4 w-4 text-slate-500" />
                                 </Button>
-                              </Link>
                             </div>
                           </div>
                         );
                       })}
+                      </div>
                     </div>
                   )}
                 </ScrollArea>
@@ -552,25 +889,31 @@ export default function AdminPage() {
 
               {/* Add Event Dialog */}
               <Dialog open={isAddEventDialogOpen} onOpenChange={setIsAddEventDialogOpen}>
-                <DialogContent className="max-w-3xl">
-                  <DialogHeader>
-                    <DialogTitle>Create New Event</DialogTitle>
-                    <DialogDescription>
+                <DialogContent className="max-w-4xl max-h-[90vh] overflow-y-auto w-[95vw] max-w-[95vw] md:w-auto">
+                  <DialogHeader className="pb-6">
+                    <DialogTitle className="text-xl sm:text-2xl font-bold">Create New Event</DialogTitle>
+                    <DialogDescription className="text-slate-600">
                       Fill in the details to create a new event on the platform
                     </DialogDescription>
                   </DialogHeader>
                   
                   <Form {...form}>
-                    <form onSubmit={form.handleSubmit(onSubmit)} className="space-y-6">
-                      <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
+                    <form onSubmit={form.handleSubmit(onSubmit)} className="space-y-6 sm:space-y-8">
+                      <div className="grid grid-cols-1 lg:grid-cols-2 gap-6 sm:gap-8">
+                        {/* Left Column */}
+                        <div className="space-y-6">
                         <FormField
                           control={form.control}
                           name="title"
                           render={({ field }) => (
                             <FormItem>
-                              <FormLabel>Event Title*</FormLabel>
+                                <FormLabel className="text-base font-semibold">Event Title*</FormLabel>
                               <FormControl>
-                                <Input placeholder="Enter event title" {...field} />
+                                  <Input 
+                                    placeholder="Enter event title" 
+                                    className="h-12 text-base"
+                                    {...field} 
+                                  />
                               </FormControl>
                               <FormMessage />
                             </FormItem>
@@ -579,23 +922,166 @@ export default function AdminPage() {
                         
                         <FormField
                           control={form.control}
-                          name="categoryId"
+                            name="imageUrl"
                           render={({ field }) => (
                             <FormItem>
-                              <FormLabel>Category*</FormLabel>
-                              <Select 
-                                onValueChange={field.onChange} 
-                                defaultValue={field.value?.toString()}
-                              >
+                                <FormLabel className="text-base font-semibold">Event Image*</FormLabel>
                                 <FormControl>
-                                  <SelectTrigger>
+                                  <div className="space-y-4">
+                                    <Input 
+                                      type="file" 
+                                      accept="image/*"
+                                      onChange={handleImageSelect}
+                                      className="h-12 text-base cursor-pointer"
+                                    />
+                                    {imagePreview && (
+                                      <div className="relative">
+                                        <img 
+                                          src={imagePreview} 
+                                          alt="Preview" 
+                                          className="w-full h-48 object-cover rounded-lg border border-slate-200"
+                                        />
+                                        <Button
+                                          type="button"
+                                          variant="outline"
+                                          size="sm"
+                                          onClick={() => {
+                                            setSelectedImage(null);
+                                            setImagePreview("");
+                                            form.setValue("imageUrl", "");
+                                          }}
+                                          className="absolute top-2 right-2 bg-white/90 hover:bg-white"
+                                        >
+                                          Remove
+                                        </Button>
+                                      </div>
+                                    )}
+                                    <Input 
+                                      {...field}
+                                      placeholder="Or enter image URL directly" 
+                                      className="h-12 text-base"
+                                      onChange={(e) => {
+                                        field.onChange(e.target.value);
+                                        if (e.target.value && !e.target.value.startsWith('data:')) {
+                                          setSelectedImage(null);
+                                          setImagePreview("");
+                                        }
+                                      }}
+                                    />
+                                  </div>
+                                </FormControl>
+                                <FormDescription className="text-sm text-slate-500">
+                                  Upload an image from your computer or provide an image URL
+                                </FormDescription>
+                                <FormMessage />
+                              </FormItem>
+                            )}
+                          />
+                          
+                          <FormField
+                            control={form.control}
+                            name="date"
+                            render={({ field }) => (
+                              <FormItem>
+                                <FormLabel className="text-base font-semibold">Start Date & Time*</FormLabel>
+                                <FormControl>
+                                  <Input 
+                                    type="datetime-local" 
+                                    className="h-12 text-base"
+                                    {...field} 
+                                  />
+                                </FormControl>
+                                <FormMessage />
+                              </FormItem>
+                            )}
+                          />
+                          
+                          <FormField
+                            control={form.control}
+                            name="venue"
+                            render={({ field }) => (
+                              <FormItem>
+                                <FormLabel className="text-base font-semibold">Venue*</FormLabel>
+                                <FormControl>
+                                  <Input 
+                                    placeholder="Venue name" 
+                                    className="h-12 text-base"
+                                    {...field} 
+                                  />
+                                </FormControl>
+                                <FormMessage />
+                              </FormItem>
+                            )}
+                          />
+                          
+                          <FormField
+                            control={form.control}
+                            name="totalSeats"
+                            render={({ field }) => (
+                              <FormItem>
+                                <FormLabel className="text-base font-semibold">Tickets Available*</FormLabel>
+                                <FormControl>
+                                  <Input 
+                                    type="number" 
+                                    min="1" 
+                                    className="h-12 text-base"
+                                    {...field}
+                                    onChange={(e) => {
+                                      const value = e.target.value;
+                                      field.onChange(value);
+                                      // Also update availableSeats to match
+                                      form.setValue("availableSeats", value);
+                                    }}
+                                  />
+                                </FormControl>
+                                <FormMessage />
+                              </FormItem>
+                            )}
+                          />
+                          
+                          <FormField
+                            control={form.control}
+                            name="description"
+                            render={({ field }) => (
+                              <FormItem>
+                                <FormLabel className="text-base font-semibold">Description*</FormLabel>
+                                <FormControl>
+                                  <Textarea 
+                                    placeholder="Describe the event in detail" 
+                                    className="min-h-32 text-base resize-none"
+                                    {...field} 
+                                  />
+                                </FormControl>
+                                <FormMessage />
+                              </FormItem>
+                            )}
+                          />
+                        </div>
+                        
+                        {/* Right Column */}
+                        <div className="space-y-6">
+                          <FormField
+                            control={form.control}
+                            name="categoryId"
+                            render={({ field }) => (
+                              <FormItem>
+                                <FormLabel className="text-base font-semibold">Category*</FormLabel>
+                                <Select onValueChange={field.onChange} defaultValue={field.value}>
+                                  <FormControl>
+                                    <SelectTrigger className="h-12 text-base">
                                     <SelectValue placeholder="Select a category" />
                                   </SelectTrigger>
                                 </FormControl>
                                 <SelectContent>
                                   {categories.map(category => (
                                     <SelectItem key={category.id} value={category.id.toString()}>
+                                        <div className="flex items-center gap-2">
+                                          <div 
+                                            className="w-3 h-3 rounded-full" 
+                                            style={{ backgroundColor: category.color }}
+                                          />
                                       {category.name}
+                                        </div>
                                     </SelectItem>
                                   ))}
                                 </SelectContent>
@@ -607,31 +1093,20 @@ export default function AdminPage() {
                         
                         <FormField
                           control={form.control}
-                          name="imageUrl"
+                            name="price"
                           render={({ field }) => (
                             <FormItem>
-                              <FormLabel>Image URL*</FormLabel>
+                                <FormLabel className="text-base font-semibold">Price (Ksh)*</FormLabel>
                               <FormControl>
-                                <Input placeholder="Enter image URL" {...field} />
+                                  <Input 
+                                    type="number" 
+                                    min="0" 
+                                    step="0.01" 
+                                    placeholder="0.00"
+                                    className="h-12 text-base"
+                                    {...field} 
+                                  />
                               </FormControl>
-                              <FormDescription>
-                                URL to the event's cover image
-                              </FormDescription>
-                              <FormMessage />
-                            </FormItem>
-                          )}
-                        />
-                        
-                        <div className="grid grid-cols-2 gap-4">
-                          <FormField
-                            control={form.control}
-                            name="price"
-                            render={({ field }) => (
-                              <FormItem>
-                                <FormLabel>Price ($)*</FormLabel>
-                                <FormControl>
-                                  <Input type="number" step="0.01" min="0" {...field} />
-                                </FormControl>
                                 <FormMessage />
                               </FormItem>
                             )}
@@ -642,24 +1117,169 @@ export default function AdminPage() {
                             name="maxPrice"
                             render={({ field }) => (
                               <FormItem>
-                                <FormLabel>Max Price ($)</FormLabel>
+                                <FormLabel className="text-base font-semibold">Max Price (Ksh)</FormLabel>
                                 <FormControl>
-                                  <Input type="number" step="0.01" min="0" {...field} />
+                                  <Input 
+                                    type="number" 
+                                    min="0" 
+                                    step="0.01" 
+                                    placeholder="0.00"
+                                    className="h-12 text-base"
+                                    {...field} 
+                                  />
                                 </FormControl>
+                                <FormDescription className="text-sm text-slate-500">
+                                  Leave empty if there's only one price tier
+                              </FormDescription>
+                              <FormMessage />
+                            </FormItem>
+                          )}
+                        />
+                        
+                          <FormField
+                            control={form.control}
+                            name="endDate"
+                            render={({ field }) => (
+                              <FormItem>
+                                <FormLabel className="text-base font-semibold">End Date & Time</FormLabel>
+                                <FormControl>
+                                  <Input 
+                                    type="datetime-local" 
+                                    className="h-12 text-base"
+                                    {...field} 
+                                  />
+                                </FormControl>
+                                <FormDescription className="text-sm text-slate-500">
+                                  Optional end time for the event
+                                </FormDescription>
                                 <FormMessage />
                               </FormItem>
                             )}
                           />
+                          
+                          <FormField
+                            control={form.control}
+                            name="availableSeats"
+                            render={({ field }) => (
+                              <FormItem>
+                                <FormLabel className="text-base font-semibold">Available Tickets*</FormLabel>
+                                <FormControl>
+                                  <Input 
+                                    type="number" 
+                                    min="1" 
+                                    className="h-12 text-base"
+                                    {...field}
+                                  />
+                                </FormControl>
+                                <FormDescription className="text-sm text-slate-500">
+                                  Number of tickets currently available for purchase
+                                </FormDescription>
+                                <FormMessage />
+                              </FormItem>
+                            )}
+                          />
+                          
+                          <FormField
+                            control={form.control}
+                            name="isFeatured"
+                            render={({ field }) => (
+                              <FormItem className="flex flex-row items-start space-x-3 space-y-0 rounded-md border p-4">
+                                <FormControl>
+                                  <Checkbox
+                                    checked={field.value}
+                                    onCheckedChange={field.onChange}
+                                  />
+                                </FormControl>
+                                <div className="space-y-1 leading-none">
+                                  <FormLabel className="text-base font-semibold">
+                                    Featured Event
+                                  </FormLabel>
+                                  <FormDescription className="text-sm text-slate-500">
+                                    Display this event in the featured section on homepage
+                                  </FormDescription>
+                                </div>
+                              </FormItem>
+                            )}
+                          />
+                        </div>
                         </div>
                         
+                                            <DialogFooter className="pt-6 border-t border-slate-200 flex flex-col sm:flex-row gap-3 sm:gap-0">
+                        <Button 
+                          type="button" 
+                          variant="outline" 
+                          onClick={() => setIsAddEventDialogOpen(false)}
+                          className="px-6 py-3 w-full sm:w-auto"
+                        >
+                          Cancel
+                        </Button>
+                        <Button 
+                          type="submit" 
+                          disabled={createEventMutation.isPending}
+                          className="px-6 py-3 w-full sm:w-auto"
+                        >
+                          {createEventMutation.isPending ? (
+                            <>
+                              <Loader2 className="mr-2 h-4 w-4 animate-spin" />
+                              Creating...
+                            </>
+                          ) : (
+                            "Create Event"
+                          )}
+                        </Button>
+                      </DialogFooter>
+                    </form>
+                  </Form>
+                </DialogContent>
+              </Dialog>
+
+              {/* Edit Event Dialog */}
+              <Dialog open={isEditEventDialogOpen} onOpenChange={setIsEditEventDialogOpen}>
+                <DialogContent className="max-w-4xl max-h-[90vh] overflow-y-auto w-[95vw] max-w-[95vw] md:w-auto">
+                  <DialogHeader className="pb-6">
+                    <DialogTitle className="text-xl sm:text-2xl font-bold">Edit Event</DialogTitle>
+                    <DialogDescription className="text-slate-600">
+                      Update the details for this event
+                    </DialogDescription>
+                  </DialogHeader>
+                  <Form {...form}>
+                    <form onSubmit={form.handleSubmit((values) => {
+                      if (!editEvent) return;
+                      const eventData: InsertEvent & { id: number } = {
+                        ...values,
+                        id: editEvent.id,
+                        location: "Daystar University",
+                        venue: values.venue,
+                        price: parseFloat(values.price),
+                        maxPrice: values.maxPrice ? parseFloat(values.maxPrice) : undefined,
+                        totalSeats: parseInt(values.totalSeats),
+                        availableSeats: parseInt(values.availableSeats),
+                        categoryId: parseInt(values.categoryId),
+                        createdBy: editEvent.createdBy,
+                        date: new Date(values.date),
+                        endDate: values.endDate ? new Date(values.endDate) : undefined,
+                        isFeatured: values.isFeatured,
+                        imageUrl: values.imageUrl,
+                        description: values.description,
+                        title: values.title,
+                      };
+                      updateEventMutation.mutate(eventData);
+                    })} className="space-y-8">
+                      <div className="grid grid-cols-1 md:grid-cols-2 gap-8">
+                        {/* Left Column */}
+                        <div className="space-y-6">
                         <FormField
                           control={form.control}
-                          name="date"
+                            name="title"
                           render={({ field }) => (
                             <FormItem>
-                              <FormLabel>Start Date & Time*</FormLabel>
+                                <FormLabel className="text-base font-semibold">Event Title*</FormLabel>
                               <FormControl>
-                                <Input type="datetime-local" {...field} />
+                                  <Input 
+                                    placeholder="Enter event title" 
+                                    className="h-12 text-base"
+                                    {...field} 
+                                  />
                               </FormControl>
                               <FormMessage />
                             </FormItem>
@@ -668,13 +1288,57 @@ export default function AdminPage() {
                         
                         <FormField
                           control={form.control}
-                          name="endDate"
+                            name="imageUrl"
                           render={({ field }) => (
                             <FormItem>
-                              <FormLabel>End Date & Time</FormLabel>
+                                <FormLabel className="text-base font-semibold">Event Image*</FormLabel>
                               <FormControl>
-                                <Input type="datetime-local" {...field} />
+                                  <div className="space-y-4">
+                                    <Input 
+                                      type="file" 
+                                      accept="image/*"
+                                      onChange={handleImageSelect}
+                                      className="h-12 text-base cursor-pointer"
+                                    />
+                                    {imagePreview && (
+                                      <div className="relative">
+                                        <img 
+                                          src={imagePreview} 
+                                          alt="Preview" 
+                                          className="w-full h-48 object-cover rounded-lg border border-slate-200"
+                                        />
+                                        <Button
+                                          type="button"
+                                          variant="outline"
+                                          size="sm"
+                                          onClick={() => {
+                                            setSelectedImage(null);
+                                            setImagePreview("");
+                                            form.setValue("imageUrl", "");
+                                          }}
+                                          className="absolute top-2 right-2 bg-white/90 hover:bg-white"
+                                        >
+                                          Remove
+                                        </Button>
+                                      </div>
+                                    )}
+                                    <Input 
+                                      {...field}
+                                      placeholder="Or enter image URL directly" 
+                                      className="h-12 text-base"
+                                      onChange={(e) => {
+                                        field.onChange(e.target.value);
+                                        if (e.target.value && !e.target.value.startsWith('data:')) {
+                                          setSelectedImage(null);
+                                          setImagePreview("");
+                                        }
+                                      }}
+                                    />
+                                  </div>
                               </FormControl>
+                                <FormDescription className="text-sm text-slate-500">
+                                  Upload an image from your computer or provide an image URL
+                                </FormDescription>
                               <FormMessage />
                             </FormItem>
                           )}
@@ -682,12 +1346,16 @@ export default function AdminPage() {
                         
                         <FormField
                           control={form.control}
-                          name="location"
+                            name="date"
                           render={({ field }) => (
                             <FormItem>
-                              <FormLabel>Location*</FormLabel>
+                                <FormLabel className="text-base font-semibold">Start Date & Time*</FormLabel>
                               <FormControl>
-                                <Input placeholder="City, State" {...field} />
+                                  <Input 
+                                    type="datetime-local" 
+                                    className="h-12 text-base"
+                                    {...field} 
+                                  />
                               </FormControl>
                               <FormMessage />
                             </FormItem>
@@ -699,24 +1367,38 @@ export default function AdminPage() {
                           name="venue"
                           render={({ field }) => (
                             <FormItem>
-                              <FormLabel>Venue*</FormLabel>
+                                <FormLabel className="text-base font-semibold">Venue*</FormLabel>
                               <FormControl>
-                                <Input placeholder="Venue name" {...field} />
+                                  <Input 
+                                    placeholder="Venue name" 
+                                    className="h-12 text-base"
+                                    {...field} 
+                                  />
                               </FormControl>
                               <FormMessage />
                             </FormItem>
                           )}
                         />
                         
-                        <div className="grid grid-cols-2 gap-4">
                           <FormField
                             control={form.control}
                             name="totalSeats"
                             render={({ field }) => (
                               <FormItem>
-                                <FormLabel>Total Seats*</FormLabel>
+                                <FormLabel className="text-base font-semibold">Tickets Available*</FormLabel>
                                 <FormControl>
-                                  <Input type="number" min="1" {...field} />
+                                  <Input 
+                                    type="number" 
+                                    min="1" 
+                                    className="h-12 text-base"
+                                    {...field}
+                                    onChange={(e) => {
+                                      const value = e.target.value;
+                                      field.onChange(value);
+                                      // Also update availableSeats to match
+                                      form.setValue("availableSeats", value);
+                                    }}
+                                  />
                                 </FormControl>
                                 <FormMessage />
                               </FormItem>
@@ -725,12 +1407,16 @@ export default function AdminPage() {
                           
                           <FormField
                             control={form.control}
-                            name="availableSeats"
+                            name="description"
                             render={({ field }) => (
                               <FormItem>
-                                <FormLabel>Available Seats*</FormLabel>
+                                <FormLabel className="text-base font-semibold">Description*</FormLabel>
                                 <FormControl>
-                                  <Input type="number" min="0" {...field} />
+                                  <Textarea 
+                                    placeholder="Describe the event in detail" 
+                                    className="min-h-32 text-base resize-none"
+                                    {...field} 
+                                  />
                                 </FormControl>
                                 <FormMessage />
                               </FormItem>
@@ -738,59 +1424,174 @@ export default function AdminPage() {
                           />
                         </div>
                         
+                        {/* Right Column */}
+                        <div className="space-y-6">
                         <FormField
                           control={form.control}
-                          name="isFeatured"
+                            name="categoryId"
                           render={({ field }) => (
-                            <FormItem className="flex flex-row items-start space-x-3 space-y-0 rounded-md border p-4">
+                              <FormItem>
+                                <FormLabel className="text-base font-semibold">Category*</FormLabel>
+                                <Select onValueChange={field.onChange} defaultValue={field.value}>
                               <FormControl>
-                                <Checkbox
-                                  checked={field.value}
-                                  onCheckedChange={field.onChange}
+                                    <SelectTrigger className="h-12 text-base">
+                                      <SelectValue placeholder="Select a category" />
+                                    </SelectTrigger>
+                                  </FormControl>
+                                  <SelectContent>
+                                    {categories.map(category => (
+                                      <SelectItem key={category.id} value={category.id.toString()}>
+                                        <div className="flex items-center gap-2">
+                                          <div 
+                                            className="w-3 h-3 rounded-full" 
+                                            style={{ backgroundColor: category.color }}
+                                          />
+                                          {category.name}
+                                        </div>
+                                      </SelectItem>
+                                    ))}
+                                  </SelectContent>
+                                </Select>
+                                <FormMessage />
+                              </FormItem>
+                            )}
+                          />
+                          
+                          <FormField
+                            control={form.control}
+                            name="price"
+                            render={({ field }) => (
+                              <FormItem>
+                                <FormLabel className="text-base font-semibold">Price (Ksh)*</FormLabel>
+                                <FormControl>
+                                  <Input 
+                                    type="number" 
+                                    min="0" 
+                                    step="0.01" 
+                                    placeholder="0.00"
+                                    className="h-12 text-base"
+                                    {...field} 
                                 />
                               </FormControl>
-                              <div className="space-y-1 leading-none">
-                                <FormLabel>Featured Event</FormLabel>
-                                <FormDescription>
-                                  Display this event in the featured section on homepage
+                                <FormMessage />
+                              </FormItem>
+                            )}
+                          />
+                          
+                          <FormField
+                            control={form.control}
+                            name="maxPrice"
+                            render={({ field }) => (
+                              <FormItem>
+                                <FormLabel className="text-base font-semibold">Max Price (Ksh)</FormLabel>
+                                <FormControl>
+                                  <Input 
+                                    type="number" 
+                                    min="0" 
+                                    step="0.01" 
+                                    placeholder="0.00"
+                                    className="h-12 text-base"
+                                    {...field} 
+                                  />
+                                </FormControl>
+                                <FormDescription className="text-sm text-slate-500">
+                                  Leave empty if there's only one price tier
                                 </FormDescription>
-                              </div>
+                                <FormMessage />
                             </FormItem>
                           )}
                         />
-                      </div>
                       
                       <FormField
                         control={form.control}
-                        name="description"
+                            name="endDate"
                         render={({ field }) => (
                           <FormItem>
-                            <FormLabel>Description*</FormLabel>
+                                <FormLabel className="text-base font-semibold">End Date & Time</FormLabel>
                             <FormControl>
-                              <Textarea 
-                                placeholder="Describe the event in detail" 
-                                className="min-h-32" 
+                                  <Input 
+                                    type="datetime-local" 
+                                    className="h-12 text-base"
                                 {...field} 
                               />
                             </FormControl>
+                                <FormDescription className="text-sm text-slate-500">
+                                  Optional end time for the event
+                                </FormDescription>
                             <FormMessage />
                           </FormItem>
                         )}
                       />
                       
-                      <DialogFooter>
+                          <FormField
+                            control={form.control}
+                            name="availableSeats"
+                            render={({ field }) => (
+                              <FormItem>
+                                <FormLabel className="text-base font-semibold">Available Tickets*</FormLabel>
+                                <FormControl>
+                                  <Input 
+                                    type="number" 
+                                    min="1" 
+                                    className="h-12 text-base"
+                                    {...field}
+                                  />
+                                </FormControl>
+                                <FormDescription className="text-sm text-slate-500">
+                                  Number of tickets currently available for purchase
+                                </FormDescription>
+                                <FormMessage />
+                              </FormItem>
+                            )}
+                          />
+                          
+                          <FormField
+                            control={form.control}
+                            name="isFeatured"
+                            render={({ field }) => (
+                              <FormItem className="flex flex-row items-start space-x-3 space-y-0 rounded-md border p-4">
+                                <FormControl>
+                                  <Checkbox
+                                    checked={field.value}
+                                    onCheckedChange={field.onChange}
+                                  />
+                                </FormControl>
+                                <div className="space-y-1 leading-none">
+                                  <FormLabel className="text-base font-semibold">
+                                    Featured Event
+                                  </FormLabel>
+                                  <FormDescription className="text-sm text-slate-500">
+                                    Display this event in the featured section on homepage
+                                  </FormDescription>
+                                </div>
+                              </FormItem>
+                            )}
+                          />
+                        </div>
+                      </div>
+                      
+                      <DialogFooter className="pt-6 border-t border-slate-200 flex flex-col sm:flex-row gap-3 sm:gap-0">
                         <Button 
                           type="button" 
                           variant="outline" 
-                          onClick={() => setIsAddEventDialogOpen(false)}
+                          onClick={() => setIsEditEventDialogOpen(false)}
+                          className="px-6 py-3 w-full sm:w-auto"
                         >
                           Cancel
                         </Button>
                         <Button 
                           type="submit"
-                          disabled={createEventMutation.isPending}
+                          disabled={updateEventMutation.isPending}
+                          className="px-6 py-3 w-full sm:w-auto"
                         >
-                          {createEventMutation.isPending ? "Creating..." : "Create Event"}
+                          {updateEventMutation.isPending ? (
+                            <>
+                              <Loader2 className="mr-2 h-4 w-4 animate-spin" />
+                              Updating...
+                            </>
+                          ) : (
+                            "Update Event"
+                          )}
                         </Button>
                       </DialogFooter>
                     </form>
@@ -800,17 +1601,18 @@ export default function AdminPage() {
 
               {/* Delete Confirmation Dialog */}
               <Dialog open={isDeleteDialogOpen} onOpenChange={setIsDeleteDialogOpen}>
-                <DialogContent className="max-w-md">
+                <DialogContent className="max-w-md w-[95vw] max-w-[95vw] md:w-auto">
                   <DialogHeader>
                     <DialogTitle>Confirm Deletion</DialogTitle>
                     <DialogDescription>
                       Are you sure you want to delete this event? This action cannot be undone.
                     </DialogDescription>
                   </DialogHeader>
-                  <DialogFooter>
+                  <DialogFooter className="flex flex-col sm:flex-row gap-3 sm:gap-0">
                     <Button 
                       variant="outline" 
                       onClick={() => setIsDeleteDialogOpen(false)}
+                      className="w-full sm:w-auto"
                     >
                       Cancel
                     </Button>
@@ -818,6 +1620,7 @@ export default function AdminPage() {
                       variant="destructive"
                       onClick={confirmDeleteEvent}
                       disabled={deleteEventMutation.isPending}
+                      className="w-full sm:w-auto"
                     >
                       {deleteEventMutation.isPending ? "Deleting..." : "Delete Event"}
                     </Button>
@@ -827,59 +1630,90 @@ export default function AdminPage() {
             </TabsContent>
             
             <TabsContent value="bookings">
-              <div className="bg-white rounded-md shadow">
-                <div className="grid grid-cols-12 gap-2 p-4 font-medium text-slate-500 border-b">
-                  <div className="col-span-1">ID</div>
-                  <div className="col-span-3">Event</div>
-                  <div className="col-span-2">User</div>
-                  <div className="col-span-2">Date</div>
-                  <div className="col-span-2">Amount</div>
-                  <div className="col-span-2">Status</div>
-                </div>
-                
-                <ScrollArea className="h-[calc(100vh-280px)]">
+              <Card>
+                <CardHeader>
+                  <CardTitle>All Bookings</CardTitle>
+                  <CardDescription>View all ticket purchases and attendee details.</CardDescription>
+                </CardHeader>
+                <CardContent>
+                  {/* Desktop Table */}
+                  <div className="hidden md:block overflow-x-auto">
+                    <table className="min-w-full divide-y divide-slate-200">
+                      <thead>
+                        <tr>
+                          <th className="px-4 py-2 text-left text-xs font-medium text-slate-500 uppercase">Booking Ref</th>
+                          <th className="px-4 py-2 text-left text-xs font-medium text-slate-500 uppercase">Event</th>
+                          <th className="px-4 py-2 text-left text-xs font-medium text-slate-500 uppercase">Buyer Name</th>
+                          <th className="px-4 py-2 text-left text-xs font-medium text-slate-500 uppercase">Buyer Email</th>
+                          <th className="px-4 py-2 text-left text-xs font-medium text-slate-500 uppercase">Tickets</th>
+                          <th className="px-4 py-2 text-left text-xs font-medium text-slate-500 uppercase">Total Price</th>
+                          <th className="px-4 py-2 text-left text-xs font-medium text-slate-500 uppercase">Booking Date</th>
+                        </tr>
+                      </thead>
+                      <tbody className="bg-white divide-y divide-slate-100">
                   {bookings.length === 0 ? (
-                    <div className="p-8 text-center">
-                      <AlertTriangleIcon className="h-10 w-10 text-slate-300 mx-auto mb-4" />
-                      <h3 className="text-lg font-medium mb-1">No bookings found</h3>
-                      <p className="text-slate-500">
-                        There are no bookings in the system yet
-                      </p>
-                    </div>
+                          <tr>
+                            <td colSpan={7} className="text-center py-8 text-slate-400">No bookings found.</td>
+                          </tr>
                   ) : (
-                    <div>
-                      {bookings.map(booking => {
+                          bookings.map(booking => {
                         const event = events.find(e => e.id === booking.eventId);
                         return (
-                          <div 
-                            key={booking.id} 
-                            className="grid grid-cols-12 gap-2 p-4 items-center border-b border-slate-100 hover:bg-slate-50"
-                          >
-                            <div className="col-span-1 text-sm font-medium">#{booking.id}</div>
-                            <div className="col-span-3">{event?.title || "Unknown Event"}</div>
-                            <div className="col-span-2">User #{booking.userId}</div>
-                            <div className="col-span-2 text-sm">
-                              {format(new Date(booking.bookingDate), "MMM d, yyyy")}
-                            </div>
-                            <div className="col-span-2 font-medium">${booking.totalPrice.toFixed(2)}</div>
-                            <div className="col-span-2">
-                              <span className={`inline-block rounded-full px-2 py-0.5 text-xs ${
-                                booking.paymentStatus === "completed" 
-                                  ? "bg-green-100 text-green-800" 
-                                  : booking.paymentStatus === "pending" 
-                                    ? "bg-amber-100 text-amber-800"
-                                    : "bg-red-100 text-red-800"
-                              }`}>
-                                {booking.paymentStatus.charAt(0).toUpperCase() + booking.paymentStatus.slice(1)}
-                              </span>
-                            </div>
-                          </div>
+                              <tr key={booking.id}>
+                                <td className="px-4 py-2 text-sm text-slate-700">{booking.id}</td>
+                                <td className="px-4 py-2 text-sm text-slate-700">{event ? event.title : 'Event not found'}</td>
+                                <td className="px-4 py-2 text-sm text-slate-700">{booking.buyerName}</td>
+                                <td className="px-4 py-2 text-sm text-slate-700">{booking.buyerEmail}</td>
+                                <td className="px-4 py-2 text-sm text-slate-700">{booking.ticketQuantity}</td>
+                                <td className="px-4 py-2 text-sm text-slate-700">${booking.totalPrice.toFixed(2)}</td>
+                                <td className="px-4 py-2 text-sm text-slate-700">{format(new Date(booking.bookingDate), 'yyyy-MM-dd HH:mm')}</td>
+                              </tr>
                         );
-                      })}
-                    </div>
-                  )}
-                </ScrollArea>
+                          })
+                        )}
+                      </tbody>
+                    </table>
               </div>
+                  
+                  {/* Mobile Card Layout */}
+                  <div className="md:hidden space-y-4">
+                    {bookings.length === 0 ? (
+                      <div className="text-center py-8 text-slate-400">No bookings found.</div>
+                    ) : (
+                      bookings.map(booking => {
+                        const event = events.find(e => e.id === booking.eventId);
+                        return (
+                          <Card key={booking.id} className="overflow-hidden">
+                            <CardContent className="p-4">
+                              <div className="space-y-3">
+                                <div className="flex items-center justify-between">
+                                  <span className="text-sm font-medium text-slate-500">Booking #{booking.id}</span>
+                                  <span className="text-sm font-bold text-slate-900">${booking.totalPrice.toFixed(2)}</span>
+                                </div>
+                                <div>
+                                  <h3 className="font-medium text-slate-900 mb-1">
+                                    {event ? event.title : 'Event not found'}
+                                  </h3>
+                                  <p className="text-sm text-slate-500">{booking.buyerName}</p>
+                                  <p className="text-sm text-slate-500">{booking.buyerEmail}</p>
+                                </div>
+                                <div className="flex items-center justify-between text-sm">
+                                  <span className="text-slate-600">
+                                    {booking.ticketQuantity} ticket{booking.ticketQuantity !== 1 ? 's' : ''}
+                                  </span>
+                                  <span className="text-slate-500">
+                                    {format(new Date(booking.bookingDate), 'MMM d, yyyy')}
+                                  </span>
+                                </div>
+                              </div>
+                            </CardContent>
+                          </Card>
+                        );
+                      })
+                    )}
+                  </div>
+                </CardContent>
+              </Card>
             </TabsContent>
             
             <TabsContent value="users">

@@ -1,257 +1,148 @@
+import { db } from './db';
 import { users, type User, type InsertUser } from "@shared/schema";
 import { events, type Event, type InsertEvent } from "@shared/schema";
 import { categories, type Category, type InsertCategory } from "@shared/schema";
-import { seats, type Seat, type InsertSeat } from "@shared/schema";
 import { bookings, type Booking, type InsertBooking } from "@shared/schema";
-import session from "express-session";
-import createMemoryStore from "memorystore";
-
-const MemoryStore = createMemoryStore(session);
+import { eq, and } from 'drizzle-orm';
 
 export interface IStorage {
-  // User operations
   getUser(id: number): Promise<User | undefined>;
+  getUserById(id: number): Promise<User | undefined>;
   getUserByUsername(username: string): Promise<User | undefined>;
+  getUserByEmail(email: string): Promise<User | undefined>;
   createUser(user: InsertUser): Promise<User>;
-  
-  // Category operations
   getCategories(): Promise<Category[]>;
   getCategory(id: number): Promise<Category | undefined>;
   createCategory(category: InsertCategory): Promise<Category>;
-  
-  // Event operations
   getEvents(): Promise<Event[]>;
   getEvent(id: number): Promise<Event | undefined>;
   getEventsByCategory(categoryId: number): Promise<Event[]>;
   getUpcomingEvents(limit?: number): Promise<Event[]>;
   getFeaturedEvent(): Promise<Event | undefined>;
+  getFeaturedEvents(): Promise<Event[]>;
   createEvent(event: InsertEvent): Promise<Event>;
   updateEvent(id: number, event: Partial<Event>): Promise<Event | undefined>;
   deleteEvent(id: number): Promise<boolean>;
-  
-  // Seat operations
-  getSeats(eventId: number): Promise<Seat[]>;
-  getSeatsByIds(seatIds: number[]): Promise<Seat[]>;
-  createSeat(seat: InsertSeat): Promise<Seat>;
-  updateSeat(id: number, seat: Partial<Seat>): Promise<Seat | undefined>;
-  
-  // Booking operations
+
   getBookings(): Promise<Booking[]>;
-  getUserBookings(userId: number): Promise<Booking[]>;
   getBooking(id: number): Promise<Booking | undefined>;
+  getBookingsByUserId(userId: number): Promise<Booking[]>;
   createBooking(booking: InsertBooking): Promise<Booking>;
-
-  // Session store
-  sessionStore: session.SessionStore;
+  updateBooking(id: number, booking: Partial<Booking>): Promise<Booking | undefined>;
 }
 
-export class MemStorage implements IStorage {
-  private users: Map<number, User>;
-  private categories: Map<number, Category>;
-  private events: Map<number, Event>;
-  private seats: Map<number, Seat>;
-  private bookings: Map<number, Booking>;
-  
-  sessionStore: session.SessionStore;
-  
-  private userCurrentId: number = 1;
-  private categoryCurrentId: number = 1;
-  private eventCurrentId: number = 1;
-  private seatCurrentId: number = 1;
-  private bookingCurrentId: number = 1;
-
-  constructor() {
-    this.users = new Map();
-    this.categories = new Map();
-    this.events = new Map();
-    this.seats = new Map();
-    this.bookings = new Map();
-    
-    this.sessionStore = new MemoryStore({
-      checkPeriod: 86400000 // prune expired entries every 24h
-    });
-
-    // Initialize with default admin user
-    this.createUser({
-      username: "admin",
-      password: "adminpassword", // Will be hashed in auth.ts
-      email: "admin@eventhub.com",
-      fullName: "Admin User",
-      isAdmin: true
-    });
-
-    // Initialize with sample categories
-    this.initializeCategories();
-  }
-
-  private initializeCategories() {
-    const sampleCategories: InsertCategory[] = [
-      { name: "Concert", color: "#6366F1" },
-      { name: "Sports", color: "#8B5CF6" },
-      { name: "Theater", color: "#22C55E" },
-      { name: "Comedy", color: "#EC4899" },
-      { name: "Festival", color: "#F59E0B" },
-      { name: "Family", color: "#3B82F6" }
-    ];
-
-    sampleCategories.forEach(cat => this.createCategory(cat));
-  }
-
-  // User operations
-  async getUser(id: number): Promise<User | undefined> {
-    return this.users.get(id);
-  }
-
-  async getUserByUsername(username: string): Promise<User | undefined> {
-    return Array.from(this.users.values()).find(
-      (user) => user.username === username,
-    );
-  }
-
-  async createUser(insertUser: InsertUser): Promise<User> {
-    const id = this.userCurrentId++;
-    const user: User = { ...insertUser, id, isAdmin: insertUser.isAdmin || false };
-    this.users.set(id, user);
-    return user;
-  }
-
-  // Category operations
-  async getCategories(): Promise<Category[]> {
-    return Array.from(this.categories.values());
-  }
-
-  async getCategory(id: number): Promise<Category | undefined> {
-    return this.categories.get(id);
-  }
-
-  async createCategory(insertCategory: InsertCategory): Promise<Category> {
-    const id = this.categoryCurrentId++;
-    const category: Category = { ...insertCategory, id };
-    this.categories.set(id, category);
-    return category;
-  }
-
-  // Event operations
-  async getEvents(): Promise<Event[]> {
-    return Array.from(this.events.values());
-  }
-
-  async getEvent(id: number): Promise<Event | undefined> {
-    return this.events.get(id);
-  }
-
-  async getEventsByCategory(categoryId: number): Promise<Event[]> {
-    return Array.from(this.events.values()).filter(
-      (event) => event.categoryId === categoryId
-    );
-  }
-
-  async getUpcomingEvents(limit?: number): Promise<Event[]> {
+export const storage: IStorage = {
+  async getUser(id) {
+    const result = await db.select().from(users).where(eq(users.id, id));
+    return result[0];
+  },
+  async getUserById(id) {
+    const result = await db.select().from(users).where(eq(users.id, id));
+    return result[0];
+  },
+  async getUserByUsername(username) {
+    const result = await db.select().from(users).where(eq(users.username, username));
+    return result[0];
+  },
+  async getUserByEmail(email) {
+    const result = await db.select().from(users).where(eq(users.email, email));
+    return result[0];
+  },
+  async createUser(user) {
+    const [created] = await db.insert(users).values(user).returning();
+    return created;
+  },
+  async getCategories() {
+    return db.select().from(categories);
+  },
+  async getCategory(id) {
+    const result = await db.select().from(categories).where(eq(categories.id, id));
+    return result[0];
+  },
+  async createCategory(category) {
+    const [created] = await db.insert(categories).values(category).returning();
+    return created;
+  },
+  async getEvents() {
+    return db.select().from(events);
+  },
+  async getEvent(id) {
+    const result = await db.select().from(events).where(eq(events.id, id));
+    return result[0];
+  },
+  async getEventsByCategory(categoryId) {
+    return db.select().from(events).where(eq(events.categoryId, categoryId));
+  },
+  async getUpcomingEvents(limit) {
     const now = new Date();
-    const upcomingEvents = Array.from(this.events.values())
-      .filter(event => new Date(event.date) > now)
+    const all = await db.select().from(events);
+    const upcoming = all.filter(event => new Date(event.date) > now)
       .sort((a, b) => new Date(a.date).getTime() - new Date(b.date).getTime());
-
-    if (limit) {
-      return upcomingEvents.slice(0, limit);
-    }
-    return upcomingEvents;
-  }
-
-  async getFeaturedEvent(): Promise<Event | undefined> {
-    return Array.from(this.events.values()).find(event => event.isFeatured);
-  }
-
-  async createEvent(insertEvent: InsertEvent): Promise<Event> {
-    const id = this.eventCurrentId++;
-    const event: Event = { ...insertEvent, id };
-    this.events.set(id, event);
-    return event;
-  }
-
-  async updateEvent(id: number, eventUpdate: Partial<Event>): Promise<Event | undefined> {
-    const event = this.events.get(id);
-    if (!event) return undefined;
-
-    const updatedEvent = { ...event, ...eventUpdate };
-    this.events.set(id, updatedEvent);
-    return updatedEvent;
-  }
-
-  async deleteEvent(id: number): Promise<boolean> {
-    return this.events.delete(id);
-  }
-
-  // Seat operations
-  async getSeats(eventId: number): Promise<Seat[]> {
-    return Array.from(this.seats.values()).filter(
-      (seat) => seat.eventId === eventId
-    );
-  }
-
-  async getSeatsByIds(seatIds: number[]): Promise<Seat[]> {
-    return Array.from(this.seats.values()).filter(
-      (seat) => seatIds.includes(seat.id)
-    );
-  }
-
-  async createSeat(insertSeat: InsertSeat): Promise<Seat> {
-    const id = this.seatCurrentId++;
-    const seat: Seat = { ...insertSeat, id };
-    this.seats.set(id, seat);
-    return seat;
-  }
-
-  async updateSeat(id: number, seatUpdate: Partial<Seat>): Promise<Seat | undefined> {
-    const seat = this.seats.get(id);
-    if (!seat) return undefined;
-
-    const updatedSeat = { ...seat, ...seatUpdate };
-    this.seats.set(id, updatedSeat);
-    return updatedSeat;
-  }
-
-  // Booking operations
-  async getBookings(): Promise<Booking[]> {
-    return Array.from(this.bookings.values());
-  }
-
-  async getUserBookings(userId: number): Promise<Booking[]> {
-    return Array.from(this.bookings.values()).filter(
-      (booking) => booking.userId === userId
-    );
-  }
-
-  async getBooking(id: number): Promise<Booking | undefined> {
-    return this.bookings.get(id);
-  }
-
-  async createBooking(insertBooking: InsertBooking): Promise<Booking> {
-    const id = this.bookingCurrentId++;
-    const booking: Booking = { ...insertBooking, id };
-    this.bookings.set(id, booking);
-
-    // Update seat availability
-    const seatIds = insertBooking.seatIds.split(',').map(id => parseInt(id));
-    for (const seatId of seatIds) {
-      const seat = this.seats.get(seatId);
-      if (seat) {
-        this.seats.set(seatId, { ...seat, isBooked: true });
+    return limit ? upcoming.slice(0, limit) : upcoming;
+  },
+  async getFeaturedEvent() {
+    const result = await db.select().from(events).where(eq(events.isFeatured, true));
+    return result[0];
+  },
+  async getFeaturedEvents() {
+    return db.select().from(events).where(eq(events.isFeatured, true));
+  },
+  async createEvent(event) {
+    const [created] = await db.insert(events).values(event).returning();
+    return created;
+  },
+  async updateEvent(id, eventUpdate) {
+    try {
+      // Convert date and endDate to Date objects if they are strings
+      if (eventUpdate.date && typeof eventUpdate.date === 'string') {
+        eventUpdate.date = new Date(eventUpdate.date);
       }
+      if (eventUpdate.endDate && typeof eventUpdate.endDate === 'string') {
+        eventUpdate.endDate = new Date(eventUpdate.endDate);
+      }
+      console.log('Updating event:', id, eventUpdate);
+      const [updated] = await db.update(events).set(eventUpdate).where(eq(events.id, id)).returning();
+      return updated;
+    } catch (error) {
+      console.error('DB update error:', error);
+      throw error;
     }
+  },
+  async deleteEvent(id) {
+    const result = await db.delete(events).where(eq(events.id, id)).returning();
+    return result.length > 0;
+  },
 
-    // Update event's available seats
-    const event = this.events.get(insertBooking.eventId);
-    if (event) {
-      const numBookedSeats = seatIds.length;
-      this.events.set(insertBooking.eventId, {
-        ...event,
-        availableSeats: event.availableSeats - numBookedSeats
-      });
+  async getBookings() {
+    return db.select().from(bookings);
+  },
+  async getBooking(id) {
+    const result = await db.select().from(bookings).where(eq(bookings.id, id));
+    return result[0];
+  },
+  async getBookingsByUserId(userId) {
+    // Note: This assumes bookings have a userId field or we can filter by buyer email
+    // For now, we'll return all bookings since the current schema doesn't have userId
+    return db.select().from(bookings);
+  },
+  async createBooking(booking) {
+    // Decrement availableSeats in the event
+    const event = await storage.getEvent(booking.eventId);
+    if (!event) throw new Error('Event not found');
+    if (event.availableSeats < booking.ticketQuantity) throw new Error('Not enough tickets available');
+    await db.update(events)
+      .set({ availableSeats: event.availableSeats - booking.ticketQuantity })
+      .where(eq(events.id, booking.eventId));
+    const [created] = await db.insert(bookings).values(booking).returning();
+    return created;
+  },
+  async updateBooking(id, bookingUpdate) {
+    try {
+      const [updated] = await db.update(bookings).set(bookingUpdate).where(eq(bookings.id, id)).returning();
+      return updated;
+    } catch (error) {
+      console.error('DB update error:', error);
+      throw error;
     }
-
-    return booking;
-  }
-}
-
-export const storage = new MemStorage();
+  },
+};

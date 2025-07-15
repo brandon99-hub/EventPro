@@ -10,6 +10,8 @@ import { Event, Category } from "@shared/schema";
 import { SearchIcon } from "lucide-react";
 import { useAuth } from "@/hooks/use-auth";
 import { Link } from "wouter";
+import { MapPinIcon, ChevronRightIcon, CalendarIcon } from "lucide-react";
+import { MobileNav } from "@/components/ui/mobile-nav";
 
 export default function EventsPage() {
   const [location] = useLocation();
@@ -42,8 +44,8 @@ export default function EventsPage() {
     }],
   });
   
-  // Get unique cities from events
-  const cities = [...new Set(events.map(event => event.location))];
+  // Get unique cities from events, filter out empty/undefined
+  const cities = Array.from(new Set(events.map(event => event.location).filter(Boolean)));
   
   // Filter and sort events
   const filteredEvents = events
@@ -83,55 +85,43 @@ export default function EventsPage() {
   };
   
   return (
-    <div className="min-h-screen bg-slate-50">
+    <div className="min-h-screen bg-gradient-to-br from-slate-50 via-white to-slate-100">
       {/* Header */}
-      <header className="bg-white shadow-sm sticky top-0 z-50">
+      <header className="backdrop-blur-md bg-white/80 shadow-sm sticky top-0 z-50 border-b border-slate-200">
         <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8">
-          <div className="flex justify-between h-16">
-            <div className="flex">
-              <div className="flex-shrink-0 flex items-center">
-                <Link href="/">
-                  <span className="text-primary text-2xl font-bold cursor-pointer">EventHub</span>
-                </Link>
-              </div>
-              <nav className="hidden sm:ml-6 sm:flex sm:space-x-8">
+          <div className="flex justify-between h-16 sm:h-20 items-center">
+            <div className="flex items-center gap-4 sm:gap-8">
+              <Link href="/">
+                <span className="text-primary text-2xl font-bold cursor-pointer drop-shadow-sm">EventHub</span>
+              </Link>
+              <nav className="hidden sm:flex sm:space-x-4 items-center">
                 <Link href="/events">
-                  <a className="border-primary text-primary border-b-2 px-1 pt-1 text-sm font-medium">
-                    Explore Events
-                  </a>
+                  <a className="px-3 py-2 rounded-lg font-semibold text-primary bg-primary/10 focus:outline-none focus:ring-2 focus:ring-primary focus:ring-offset-2">Explore Events</a>
                 </Link>
                 <Link href="/calendar">
-                  <a className="border-transparent text-slate-600 hover:border-slate-300 hover:text-slate-800 px-1 pt-1 border-b-2 text-sm font-medium">
-                    Calendar
-                  </a>
-                </Link>
-                <Link href="/#categories">
-                  <a className="border-transparent text-slate-600 hover:border-slate-300 hover:text-slate-800 px-1 pt-1 border-b-2 text-sm font-medium">
-                    Categories
-                  </a>
+                  <a className="px-3 py-2 rounded-lg font-medium text-slate-700 hover:bg-primary/10 hover:text-primary transition-colors duration-150 focus:outline-none focus:ring-2 focus:ring-primary focus:ring-offset-2">Calendar</a>
                 </Link>
               </nav>
             </div>
-            <div className="hidden sm:ml-6 sm:flex sm:items-center">
-              <div className="relative mr-4">
-                <form onSubmit={handleSearch}>
-                  <div className="absolute inset-y-0 left-0 pl-3 flex items-center pointer-events-none">
-                    <SearchIcon className="h-4 w-4 text-slate-400" />
-                  </div>
-                  <input 
-                    type="text"
-                    value={searchQuery}
-                    onChange={(e) => setSearchQuery(e.target.value)}
-                    className="block w-full pl-10 pr-3 py-2 border border-slate-300 rounded-md leading-5 bg-white placeholder-slate-500 focus:outline-none focus:placeholder-slate-400 focus:ring-1 focus:ring-primary focus:border-primary sm:text-sm"
-                    placeholder="Search events..."
-                  />
-                </form>
-              </div>
+            <div className="flex items-center gap-2 sm:gap-4">
+              <form className="relative hidden md:block">
+                <div className="absolute inset-y-0 left-0 pl-3 flex items-center pointer-events-none">
+                  <SearchIcon className="h-5 w-5 text-slate-400" />
+                </div>
+                <input 
+                  type="text"
+                  value={searchQuery}
+                  onChange={(e) => setSearchQuery(e.target.value)}
+                  className="block w-full pl-10 pr-3 py-2 border border-slate-300 rounded-lg leading-5 bg-white/80 placeholder-slate-500 focus:outline-none focus:ring-2 focus:ring-primary focus:border-primary sm:text-sm shadow-sm transition"
+                  placeholder="Search events..."
+                  style={{ minWidth: 220 }}
+                />
+              </form>
               {user ? (
                 <Link href="/dashboard">
-                  <button className="bg-white rounded-full flex text-sm focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-primary">
+                  <button className="bg-white rounded-full flex text-sm focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-primary border border-slate-200 shadow-sm">
                     <img 
-                      className="h-8 w-8 rounded-full" 
+                      className="h-8 w-8 sm:h-10 sm:w-10 rounded-full" 
                       src={`https://ui-avatars.com/api/?name=${encodeURIComponent(user.fullName)}&background=random`} 
                       alt={user.fullName}
                     />
@@ -139,23 +129,29 @@ export default function EventsPage() {
                 </Link>
               ) : (
                 <Link href="/auth">
-                  <Button variant="outline">Sign In</Button>
+                  <Button variant="default" className="hidden sm:inline-flex ml-2 px-4 sm:px-6 py-2 text-sm sm:text-base font-semibold shadow-md bg-primary text-white hover:bg-primary/90 rounded-lg transition">Sign In</Button>
                 </Link>
               )}
+              <MobileNav 
+                searchQuery={searchQuery}
+                onSearchChange={setSearchQuery}
+                onSearchSubmit={handleSearch}
+                currentPath="/events"
+              />
             </div>
           </div>
         </div>
       </header>
 
       {/* Category Filters */}
-      <section className="bg-white py-6">
+      <section className="py-8">
         <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8">
-          <div className="flex flex-wrap items-center justify-between">
-            <h2 className="text-2xl font-bold text-slate-800">Explore Events</h2>
-            <div className="flex items-center space-x-4 overflow-x-auto py-4 md:py-0 scrollbar-hide">
+          <div className="bg-white/80 backdrop-blur-md rounded-2xl shadow-lg p-6 flex flex-wrap items-center justify-between">
+            <h2 className="text-2xl font-bold text-slate-800 mb-4 sm:mb-0">Explore Events</h2>
+            <div className="flex items-center space-x-4 overflow-x-auto py-2 scrollbar-hide">
               <Button 
                 variant={selectedCategory === null ? "default" : "outline"} 
-                className="flex-shrink-0 rounded-full"
+                className="flex-shrink-0 rounded-full font-semibold px-6 py-2 shadow-sm border border-primary/20 bg-primary/5 hover:bg-primary/10"
                 onClick={() => setSelectedCategory(null)}
               >
                 All Events
@@ -164,7 +160,7 @@ export default function EventsPage() {
                 <Button 
                   key={category.id} 
                   variant={selectedCategory === category.id ? "default" : "outline"} 
-                  className="flex-shrink-0 rounded-full"
+                  className="flex-shrink-0 rounded-full font-semibold px-6 py-2 shadow-sm border border-primary/20 bg-primary/5 hover:bg-primary/10"
                   onClick={() => setSelectedCategory(category.id)}
                 >
                   {category.name}
@@ -176,9 +172,9 @@ export default function EventsPage() {
       </section>
 
       {/* Event Listings */}
-      <section className="py-12 bg-slate-50">
-        <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8">
-          <div className="flex justify-between items-center mb-8">
+      <section className="py-12">
+        <div className="max-w-7xl mx-auto px-2 sm:px-6 lg:px-8">
+          <div className="flex flex-col md:flex-row md:justify-between md:items-center mb-8 gap-4">
             <div>
               <h2 className="text-2xl font-bold text-slate-800 mb-2">
                 {searchQuery ? `Search Results for "${searchQuery}"` : "Upcoming Events"}
@@ -187,24 +183,26 @@ export default function EventsPage() {
                 {filteredEvents.length} {filteredEvents.length === 1 ? 'event' : 'events'} found
               </p>
             </div>
-            <div className="flex items-center space-x-4">
-              <div>
+            <div className="flex items-center space-x-4 bg-white/80 backdrop-blur-md rounded-xl shadow p-4">
+              <div className="flex items-center gap-2">
+                <MapPinIcon className="h-5 w-5 text-primary" />
                 <Select
-                  value={selectedCity || ""}
-                  onValueChange={(value) => setSelectedCity(value || null)}
+                  value={selectedCity || "all"}
+                  onValueChange={(value) => setSelectedCity(value === "all" ? null : value)}
                 >
                   <SelectTrigger className="w-[180px]">
                     <SelectValue placeholder="Select location" />
                   </SelectTrigger>
                   <SelectContent>
-                    <SelectItem value="">All Locations</SelectItem>
+                    <SelectItem value="all">All Locations</SelectItem>
                     {cities.map((city) => (
                       <SelectItem key={city} value={city}>{city}</SelectItem>
                     ))}
                   </SelectContent>
                 </Select>
               </div>
-              <div>
+              <div className="flex items-center gap-2">
+                <ChevronRightIcon className="h-5 w-5 text-primary" />
                 <Select 
                   value={sortOption} 
                   onValueChange={(value) => setSortOption(value)}
@@ -224,10 +222,10 @@ export default function EventsPage() {
           </div>
 
           {isLoading ? (
-            <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4 gap-6">
+            <div className="grid grid-cols-1 sm:grid-cols-2 md:grid-cols-3 lg:grid-cols-4 gap-6 sm:gap-8">
               {[...Array(8)].map((_, index) => (
-                <div key={index} className="bg-white rounded-lg shadow-sm h-96 animate-pulse">
-                  <div className="h-48 bg-slate-200 rounded-t-lg"></div>
+                <div key={index} className="bg-white/80 rounded-2xl shadow-lg h-96 animate-pulse">
+                  <div className="h-40 sm:h-48 bg-slate-200 rounded-t-2xl"></div>
                   <div className="p-4 space-y-3">
                     <div className="h-4 bg-slate-200 rounded w-3/4"></div>
                     <div className="h-6 bg-slate-200 rounded w-5/6"></div>
@@ -257,13 +255,11 @@ export default function EventsPage() {
               </Button>
             </div>
           ) : (
-            <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4 gap-6">
+            <div className="grid grid-cols-1 sm:grid-cols-2 md:grid-cols-3 lg:grid-cols-4 gap-6 sm:gap-8">
               {paginatedEvents.map(event => {
                 const category = categories.find(c => c.id === event.categoryId);
                 if (!category) return null;
-                return (
-                  <EventCard key={event.id} event={event} category={category} />
-                );
+                return <EventCard key={event.id} event={event} category={category} />;
               })}
             </div>
           )}
@@ -305,7 +301,7 @@ export default function EventsPage() {
       </section>
 
       {/* Footer */}
-      <footer className="bg-slate-800 text-white">
+      <footer className="bg-slate-800 text-white mt-auto">
         <div className="max-w-7xl mx-auto py-12 px-4 sm:px-6 lg:px-8">
           <div className="md:grid md:grid-cols-4 md:gap-8">
             <div>
