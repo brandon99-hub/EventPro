@@ -6,7 +6,14 @@ const app = express();
 
 // CORS configuration
 app.use((req, res, next) => {
-  res.header('Access-Control-Allow-Origin', 'http://localhost:5000');
+  // Allow requests from the same origin (for production) or localhost (for development)
+  const allowedOrigin = process.env.NODE_ENV === 'production' 
+    ? req.headers.origin 
+    : 'http://localhost:5000';
+    
+  if (allowedOrigin) {
+    res.header('Access-Control-Allow-Origin', allowedOrigin);
+  }
   res.header('Access-Control-Allow-Credentials', 'true');
   res.header('Access-Control-Allow-Methods', 'GET, POST, PUT, DELETE, OPTIONS');
   res.header('Access-Control-Allow-Headers', 'Origin, X-Requested-With, Content-Type, Accept, Authorization');
@@ -71,14 +78,14 @@ app.use((req, res, next) => {
     serveStatic(app);
   }
 
-  // ALWAYS serve the app on port 5000
-  // this serves both the API and the client.
-  // It is the only port that is not firewalled.
-  const port = 5000;
+  // Use PORT environment variable for production, fallback to 5000 for development
+  const port = process.env.PORT || 5000;
+  const host = process.env.NODE_ENV === 'production' ? '0.0.0.0' : 'localhost';
+  
   server.listen({
     port,
-    host: "localhost",
+    host,
   }, () => {
-    log(`serving on port ${port}`);
+    log(`serving on port ${port} (${process.env.NODE_ENV || 'development'})`);
   });
 })();

@@ -11,20 +11,28 @@ import { insertUserSchema, insertEventSchema, insertBookingSchema, insertCategor
 import { mpesaService } from "./services/mpesa";
 import { commissionService } from "./services/commission";
 import { mpesaPayoutService } from "./mpesa-payout";
+import pgSimple from "connect-pg-simple";
 
-// Create a simple memory store for sessions
-const MemoryStore = session.MemoryStore;
+// Create PostgreSQL session store
+const PostgresStore = pgSimple(session);
 
 export async function registerRoutes(app: Express): Promise<Server> {
   // Session configuration
   app.use(session({
     secret: process.env.SESSION_SECRET || "your-secret-key",
-    resave: true,
-    saveUninitialized: true,
-    store: new MemoryStore(),
+    resave: false,
+    saveUninitialized: false,
+    store: new PostgresStore({
+      conObject: {
+        connectionString: process.env.DATABASE_URL,
+        ssl: process.env.NODE_ENV === 'production' ? { rejectUnauthorized: false } : false,
+      },
+      tableName: 'sessions',
+      createTableIfMissing: true,
+    }),
     cookie: { 
-      secure: false, // Set to true in production with HTTPS
-      httpOnly: false, // Allow JavaScript access for debugging
+      secure: process.env.NODE_ENV === 'production', // Use secure cookies in production
+      httpOnly: true, // Prevent XSS attacks
       maxAge: 24 * 60 * 60 * 1000, // 24 hours
       sameSite: 'lax',
       path: '/'
