@@ -6,18 +6,16 @@ const app = express();
 
 // CORS configuration
 app.use((req, res, next) => {
-  // Allow requests from the same origin (for production) or localhost (for development)
-  const allowedOrigin = process.env.NODE_ENV === 'production' 
-    ? req.headers.origin 
+  // Allow requests from the deployed frontend in production, or localhost in development
+  const allowedOrigin = process.env.NODE_ENV === 'production'
+    ? 'https://eventpro-70gf.onrender.com'
     : 'http://localhost:5000';
-    
-  if (allowedOrigin) {
-    res.header('Access-Control-Allow-Origin', allowedOrigin);
-  }
+
+  res.header('Access-Control-Allow-Origin', allowedOrigin);
   res.header('Access-Control-Allow-Credentials', 'true');
   res.header('Access-Control-Allow-Methods', 'GET, POST, PUT, DELETE, OPTIONS');
   res.header('Access-Control-Allow-Headers', 'Origin, X-Requested-With, Content-Type, Accept, Authorization');
-  
+
   if (req.method === 'OPTIONS') {
     res.sendStatus(200);
   } else {

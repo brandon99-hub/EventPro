@@ -59,21 +59,21 @@ export const events = pgTable("events", {
   isFeatured: boolean("is_featured").default(false).notNull(),
 });
 
-export const insertEventSchema = createInsertSchema(events).pick({
-  title: true,
-  description: true,
-  imageUrl: true,
-  date: true,
-  endDate: true,
-  location: true,
-  venue: true,
-  price: true,
-  maxPrice: true,
-  totalSeats: true,
-  availableSeats: true,
-  categoryId: true,
-  createdBy: true,
-  isFeatured: true,
+export const insertEventSchema = z.object({
+  title: z.string(),
+  description: z.string(),
+  imageUrl: z.string(),
+  date: z.preprocess((val) => typeof val === 'string' ? new Date(val) : val, z.date()),
+  endDate: z.preprocess((val) => val === undefined ? undefined : (typeof val === 'string' ? new Date(val) : val), z.date().optional()),
+  location: z.string(),
+  venue: z.string(),
+  price: z.number(),
+  maxPrice: z.number().optional(),
+  totalSeats: z.number(),
+  availableSeats: z.number(),
+  categoryId: z.number(),
+  createdBy: z.number(),
+  isFeatured: z.boolean(),
 });
 
 export type InsertEvent = z.infer<typeof insertEventSchema>;

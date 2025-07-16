@@ -43,6 +43,9 @@ export function setupAuth(app: Express) {
     }),
     cookie: {
       maxAge: 24 * 60 * 60 * 1000, // 24 hours
+      sameSite: 'none', // Required for cross-site cookies
+      secure: true,     // Required for cross-site cookies over HTTPS
+      // domain: '.onrender.com' // Uncomment and set if using subdomains
     }
   };
 

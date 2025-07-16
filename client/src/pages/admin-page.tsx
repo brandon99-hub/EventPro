@@ -235,8 +235,8 @@ export default function AdminPage() {
       availableSeats: parseInt(values.availableSeats),
       categoryId: parseInt(values.categoryId),
       createdBy: user.id,
-      date: new Date(values.date),
-      endDate: values.endDate ? new Date(values.endDate) : undefined,
+      date: new Date(values.date).toISOString(),
+      endDate: values.endDate ? new Date(values.endDate).toISOString() : undefined,
       isFeatured: values.isFeatured
     };
 
@@ -1256,8 +1256,8 @@ export default function AdminPage() {
                         availableSeats: parseInt(values.availableSeats),
                         categoryId: parseInt(values.categoryId),
                         createdBy: editEvent.createdBy,
-                        date: new Date(values.date),
-                        endDate: values.endDate ? new Date(values.endDate) : undefined,
+                        date: new Date(values.date).toISOString(),
+                        endDate: values.endDate ? new Date(values.endDate).toISOString() : undefined,
                         isFeatured: values.isFeatured,
                         imageUrl: values.imageUrl,
                         description: values.description,
