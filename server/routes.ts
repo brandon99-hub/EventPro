@@ -492,8 +492,27 @@ export async function registerRoutes(app: Express): Promise<Server> {
         const reference = req.body.Body?.stkCallback?.CallbackMetadata?.Item?.find((i: any) => i.Name === 'AccountReference')?.Value;
         console.log('🔍 AccountReference found:', reference);
 
+        let bookingId: number | null = null;
+
+        // Method 1: Try to get booking ID from AccountReference
         if (reference && reference.startsWith('BOOKING-')) {
-          const bookingId = parseInt(reference.replace('BOOKING-', ''));
+          bookingId = parseInt(reference.replace('BOOKING-', ''));
+          console.log(`📋 Found booking ID from AccountReference: ${bookingId}`);
+        } else {
+          // Method 2: Find booking by CheckoutRequestID
+          console.log('🔍 AccountReference not found, searching by CheckoutRequestID...');
+          const bookings = await storage.getBookings();
+          const booking = bookings.find((b: any) => b.paymentReference === result.checkoutRequestID);
+          
+          if (booking) {
+            bookingId = booking.id;
+            console.log(`📋 Found booking ID from CheckoutRequestID: ${bookingId}`);
+          } else {
+            console.log('❌ No booking found with this CheckoutRequestID');
+          }
+        }
+
+        if (bookingId) {
           console.log(`Processing payment for booking ${bookingId}`);
           
           try {
@@ -668,6 +687,8 @@ export async function registerRoutes(app: Express): Promise<Server> {
           } catch (error) {
             console.error(`Failed to update booking ${bookingId}:`, error);
           }
+        } else {
+          console.log('❌ No booking ID found, cannot process payment completion');
         }
       } else {
         // Payment failed - update booking status
