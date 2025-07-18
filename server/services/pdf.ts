@@ -49,8 +49,8 @@ export class PDFService {
         '--no-zygote',
         '--single-process',
         '--disable-gpu'
-      ],
-      executablePath: process.env.PUPPETEER_EXECUTABLE_PATH || '/usr/bin/google-chrome-stable'
+      ]
+      // Let Puppeteer find Chrome automatically
     });
 
     const html = `

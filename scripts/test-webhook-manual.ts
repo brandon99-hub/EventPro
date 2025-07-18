@@ -8,7 +8,7 @@ async function testWebhook() {
     "Body": {
       "stkCallback": {
         "MerchantRequestID": "test-merchant-request-id",
-        "CheckoutRequestID": "ws_CO_19072025014808076741991213", // This is your actual stuck payment
+        "CheckoutRequestID": "ws_CO_19072025020501796741991213", // This is your current stuck payment
         "ResultCode": 0,
         "ResultDesc": "The service request is processed successfully.",
         "CallbackMetadata": {
