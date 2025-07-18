@@ -300,9 +300,12 @@ export class MpesaService {
     phoneNumber?: string;
   } {
     try {
+      console.log('🔍 Processing webhook payload:', JSON.stringify(payload, null, 2));
+      
       const body = payload.Body?.stkCallback;
       
       if (!body) {
+        console.log('❌ No stkCallback in payload');
         return { success: false };
       }
 
@@ -310,11 +313,19 @@ export class MpesaService {
       const checkoutRequestID = body.CheckoutRequestID;
       const resultDesc = body.ResultDesc;
 
-      if (resultCode === '0') {
+      console.log(`📊 Webhook ResultCode: ${resultCode}, ResultDesc: ${resultDesc}`);
+
+      // M-Pesa success codes can be '0' or '1' depending on the API version
+      if (resultCode === '0' || resultCode === '1') {
         // Payment successful
         const item = body.CallbackMetadata?.Item?.find((i: any) => i.Name === 'TransactionID');
         const amountItem = body.CallbackMetadata?.Item?.find((i: any) => i.Name === 'Amount');
         const phoneItem = body.CallbackMetadata?.Item?.find((i: any) => i.Name === 'PhoneNumber');
+
+        console.log('✅ Payment successful, extracting metadata...');
+        console.log('📱 TransactionID:', item?.Value);
+        console.log('💰 Amount:', amountItem?.Value);
+        console.log('📞 Phone:', phoneItem?.Value);
 
         return {
           success: true,
@@ -327,6 +338,7 @@ export class MpesaService {
         };
       } else {
         // Payment failed
+        console.log('❌ Payment failed:', resultDesc);
         return {
           success: false,
           checkoutRequestID,

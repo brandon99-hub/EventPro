@@ -131,7 +131,7 @@ export default function CheckoutPage() {
           setCurrentStep("success");
           toast({
             title: "Payment initiated!",
-            description: statusResult.errorMessage || "Please check your email for confirmation once payment is processed.",
+            description: "Payment is being processed. Please check your email for confirmation.",
           });
         } else {
           setCurrentStep("failed");

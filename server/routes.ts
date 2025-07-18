@@ -482,11 +482,15 @@ export async function registerRoutes(app: Express): Promise<Server> {
 
     app.post("/api/payments/mpesa/callback", async (req, res) => {
     try {
+      console.log('📥 Webhook received:', JSON.stringify(req.body, null, 2));
+      
       const result = mpesaService.processWebhook(req.body);
+      console.log('🔍 Webhook processing result:', result);
 
       if (result.success) {
         // Extract booking ID from reference (format: BOOKING-{id})
         const reference = req.body.Body?.stkCallback?.CallbackMetadata?.Item?.find((i: any) => i.Name === 'AccountReference')?.Value;
+        console.log('🔍 AccountReference found:', reference);
 
         if (reference && reference.startsWith('BOOKING-')) {
           const bookingId = parseInt(reference.replace('BOOKING-', ''));
