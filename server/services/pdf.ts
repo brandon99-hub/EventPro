@@ -49,8 +49,8 @@ export class PDFService {
         '--no-zygote',
         '--single-process',
         '--disable-gpu'
-      ]
-      // Let Puppeteer find Chrome automatically
+      ],
+      executablePath: '/opt/render/.cache/puppeteer/chrome/linux-138.0.7204.157/chrome-linux64/chrome'
     });
 
     const html = `
