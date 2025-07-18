@@ -1,0 +1,13 @@
+services:
+  - type: web
+    name: eventmasterpro
+    env: node
+    buildCommand: npm install && npx puppeteer browsers install chrome
+    startCommand: npm start
+    envVars:
+      - key: NODE_ENV
+        value: production
+      - key: MPESA_ENVIRONMENT
+        value: sandbox
+      - key: MPESA_CALLBACK_URL
+        value: https://eventpro-70gf.onrender.com/api/payments/mpesa/callback 

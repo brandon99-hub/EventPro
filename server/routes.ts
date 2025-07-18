@@ -217,6 +217,15 @@ export async function registerRoutes(app: Express): Promise<Server> {
     res.json(req.user);
   });
 
+  // Debug webhook endpoint
+  app.get("/api/debug/webhook", (req, res) => {
+    res.json({
+      callbackUrl: process.env.MPESA_CALLBACK_URL,
+      environment: process.env.MPESA_ENVIRONMENT,
+      shortcode: process.env.MPESA_SHORTCODE
+    });
+  });
+
   // User bookings route
   app.get("/api/user/bookings", async (req, res) => {
     if (!req.isAuthenticated()) {
@@ -482,7 +491,9 @@ export async function registerRoutes(app: Express): Promise<Server> {
 
     app.post("/api/payments/mpesa/callback", async (req, res) => {
     try {
-      console.log('📥 Webhook received:', JSON.stringify(req.body, null, 2));
+      console.log('📥 Webhook received at:', new Date().toISOString());
+      console.log('📥 Webhook headers:', req.headers);
+      console.log('📥 Webhook body:', JSON.stringify(req.body, null, 2));
       
       const result = mpesaService.processWebhook(req.body);
       console.log('🔍 Webhook processing result:', result);
