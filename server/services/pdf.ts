@@ -1,5 +1,5 @@
 import React from 'react';
-import { Document, Page, Text, View, StyleSheet, pdf } from '@react-pdf/renderer';
+import { Document, Page, Text, View, StyleSheet, pdf, Image } from '@react-pdf/renderer';
 import QRCode from 'qrcode';
 import { Event, Booking, Ticket } from '../../shared/schema';
 
@@ -76,6 +76,12 @@ const styles = StyleSheet.create({
   qrCode: {
     textAlign: 'center',
     marginVertical: 10,
+    alignItems: 'center',
+  },
+  qrImage: {
+    width: 80,
+    height: 80,
+    marginBottom: 5,
   },
   qrText: {
     fontSize: 10,
@@ -118,8 +124,8 @@ export class PDFService {
   private async generateQRCodeDataURL(text: string): Promise<string> {
     try {
       return await QRCode.toDataURL(text, {
-        width: 120,
-        margin: 1,
+        width: 200,
+        margin: 2,
         color: {
           dark: '#000000',
           light: '#FFFFFF'
@@ -226,7 +232,13 @@ export class PDFService {
               React.createElement(View, { key: index, style: styles.ticket },
                 React.createElement(Text, { style: styles.ticketTitle }, `Ticket ${ticket.ticketNumber}`),
                 React.createElement(View, { style: styles.qrCode },
-                  React.createElement(Text, { style: styles.qrText }, `QR Code: ${ticket.qrCode}`)
+                  ticket.qrCodeImage ? React.createElement(Image, { 
+                    src: ticket.qrCodeImage, 
+                    style: styles.qrImage 
+                  }) : null,
+                  React.createElement(Text, { style: styles.qrText }, `QR Code: ${ticket.qrCode}`),
+                  React.createElement(Text, { style: styles.qrText }, `Scan this code at the entrance`),
+                  React.createElement(Text, { style: styles.qrText }, `Valid for: ${event.title}`)
                 )
               )
             )

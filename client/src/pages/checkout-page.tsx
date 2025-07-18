@@ -401,36 +401,7 @@ export default function CheckoutPage() {
                     <p className="text-slate-600 text-sm sm:text-base">Enjoy the event!</p>
               </div>
             </CardContent>
-            <CardFooter className="flex flex-col gap-3">
-              <Button 
-                onClick={async () => {
-                  if (checkoutRequestID) {
-                    try {
-                      const status = await paymentService.checkPaymentStatus(checkoutRequestID);
-                      if (status.status === 'completed') {
-                        toast({
-                          title: "Payment confirmed!",
-                          description: "Your payment has been processed successfully.",
-                        });
-                      } else {
-                        toast({
-                          title: "Payment still processing",
-                          description: "Please check your email for confirmation once payment is processed.",
-                        });
-                      }
-                    } catch (error) {
-                      toast({
-                        title: "Status check failed",
-                        description: "Please check your email for confirmation.",
-                      });
-                    }
-                  }
-                }}
-                variant="outline"
-                className="h-12 text-base px-8"
-              >
-                Check Payment Status
-              </Button>
+            <CardFooter className="flex justify-center">
               <Link href="/events">
                     <Button className="h-12 text-base px-8">Back to Events</Button>
               </Link>
