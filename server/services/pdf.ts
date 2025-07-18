@@ -243,9 +243,10 @@ export class PDFService {
     );
 
     try {
-      // Generate PDF buffer
-      const pdfBuffer = await pdf(MyDocument()).toBuffer();
-      return Buffer.from(await pdfBuffer.arrayBuffer());
+      // Generate PDF as blob and convert to buffer
+      const pdfBlob = await pdf(MyDocument()).toBlob();
+      const arrayBuffer = await pdfBlob.arrayBuffer();
+      return Buffer.from(arrayBuffer);
     } catch (error) {
       console.error('Failed to generate PDF:', error);
       throw new Error('Failed to generate PDF receipt');
