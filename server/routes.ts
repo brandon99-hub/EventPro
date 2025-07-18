@@ -17,9 +17,11 @@ import pgSimple from "connect-pg-simple";
 const PostgresStore = pgSimple(session);
 
 export async function registerRoutes(app: Express): Promise<Server> {
-  // Session configuration
-  app.use(session({
-    secret: process.env.SESSION_SECRET || "your-secret-key",
+  // Session configuration - using the same config as auth.ts for consistency
+  const sessionSecret = process.env.SESSION_SECRET || "event-hub-session-secret";
+  
+  const sessionSettings: session.SessionOptions = {
+    secret: sessionSecret,
     resave: false,
     saveUninitialized: false,
     store: new PostgresStore({
@@ -30,15 +32,18 @@ export async function registerRoutes(app: Express): Promise<Server> {
       tableName: 'sessions',
       createTableIfMissing: true,
     }),
-    cookie: { 
-      secure: process.env.NODE_ENV === 'production', // Use secure cookies in production
-      httpOnly: true, // Prevent XSS attacks
+    cookie: {
       maxAge: 24 * 60 * 60 * 1000, // 24 hours
-      sameSite: 'lax',
+      sameSite: process.env.NODE_ENV === 'production' ? 'none' : 'lax', // Required for cross-site cookies in production
+      secure: process.env.NODE_ENV === 'production', // Required for cross-site cookies over HTTPS
+      httpOnly: true, // Prevent XSS attacks
       path: '/'
     },
     name: 'eventhub.sid' // Custom session name
-  }));
+  };
+
+  app.set("trust proxy", 1);
+  app.use(session(sessionSettings));
 
   app.use(passport.initialize());
   app.use(passport.session());
@@ -94,6 +99,24 @@ export async function registerRoutes(app: Express): Promise<Server> {
     
     next();
   });
+
+  // Generate QR code data URL for email
+  const generateQRCodeDataURL = async (text: string): Promise<string> => {
+    try {
+      const QRCode = await import('qrcode');
+      return await QRCode.toDataURL(text, {
+        width: 200,
+        margin: 2,
+        color: {
+          dark: '#000000',
+          light: '#FFFFFF'
+        }
+      });
+    } catch (error) {
+      console.error('Failed to generate QR code:', error);
+      return '';
+    }
+  };
 
   // Email service
   const sendEmail = async (to: string, subject: string, html: string) => {
@@ -450,7 +473,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
                   console.log(`✅ Automatic payout successful for booking ${bookingId}: ${payoutResult.transactionId}`);
                   
                   // Send payout notification to organizer
-                  const organizer = await storage.getUser(event.createdBy);
+                  const organizer = await storage.getUserById(event.createdBy);
                   if (organizer) {
                     await sendEmail(
                       organizer.email,
@@ -497,29 +520,66 @@ export async function registerRoutes(app: Express): Promise<Server> {
               console.error(`Failed to process automatic payout for booking ${bookingId}:`, payoutError);
             }
             
-            // Send payment confirmation email
-            const booking = await storage.getBooking(bookingId);
-            const event = booking ? await storage.getEvent(booking.eventId) : null;
+            // Generate multiple tickets (one for each ticket quantity)
+            const bookingData = await storage.getBooking(bookingId);
+            if (!bookingData) {
+              throw new Error('Booking not found');
+            }
+
+            const tickets = [];
+            for (let i = 1; i <= bookingData.ticketQuantity; i++) {
+              const qrCode = `TICKET-${Date.now()}-${Math.random().toString(36).substr(2, 9)}-${i}`;
+              const ticket = await storage.createTicket({
+                bookingId: bookingId,
+                eventId: bookingData.eventId,
+                ticketNumber: i,
+                qrCode: qrCode,
+                isScanned: false,
+                attendanceStatus: 'not_attended'
+              });
+              tickets.push(ticket);
+            }
             
-            if (booking && event) {
+            // Send payment confirmation email with all QR codes
+            const event = await storage.getEvent(bookingData.eventId);
+            
+            if (bookingData && event) {
+              // Generate QR code images for all tickets
+              const qrCodeImages = await Promise.all(
+                tickets.map(async (ticket) => {
+                  const image = await generateQRCodeDataURL(ticket.qrCode);
+                  return { ticket, image };
+                })
+              );
+              
+              const qrCodesHtml = qrCodeImages.map(({ ticket, image }) => `
+                <div style="margin: 20px 0; padding: 15px; border: 2px solid #ddd; border-radius: 8px;">
+                  <h4>Ticket ${ticket.ticketNumber}</h4>
+                  ${image ? `<img src="${image}" alt="QR Code for Ticket ${ticket.ticketNumber}" style="border: 2px solid #000; padding: 10px; margin: 10px 0;" />` : ''}
+                  <p><strong>QR Code:</strong> ${ticket.qrCode}</p>
+                </div>
+              `).join('');
+              
               await sendEmail(
-                booking.buyerEmail,
+                bookingData.buyerEmail,
                 `Payment Confirmed - ${event.title}`,
                 `
                   <h2>Payment Confirmed!</h2>
-                  <p>Dear ${booking.buyerName},</p>
-                  <p>Your payment of KES ${booking.totalPrice} has been successfully processed.</p>
+                  <p>Dear ${bookingData.buyerName},</p>
+                  <p>Your payment of KES ${bookingData.totalPrice} has been successfully processed.</p>
                   <h3>Booking Details:</h3>
                   <ul>
                     <li><strong>Event:</strong> ${event.title}</li>
                     <li><strong>Date:</strong> ${new Date(event.date).toLocaleString()}</li>
                     <li><strong>Venue:</strong> ${event.venue}, ${event.location}</li>
-                    <li><strong>Tickets:</strong> ${booking.ticketQuantity}</li>
-                    <li><strong>Total Paid:</strong> KES ${booking.totalPrice}</li>
+                    <li><strong>Tickets:</strong> ${bookingData.ticketQuantity}</li>
+                    <li><strong>Total Paid:</strong> KES ${bookingData.totalPrice}</li>
                     <li><strong>Transaction ID:</strong> ${result.transactionId}</li>
-                    <li><strong>Booking Reference:</strong> ${booking.id}</li>
+                    <li><strong>Booking Reference:</strong> ${bookingData.id}</li>
                   </ul>
-                  <p>Please keep this email as your proof of payment. Show it at the entrance for verification.</p>
+                  <h3>Your QR Codes:</h3>
+                  ${qrCodesHtml}
+                  <p><strong>Important:</strong> Each ticket has a unique QR code. Please save this email and show the appropriate QR code at the entrance for each person attending. Each QR code can only be used once.</p>
                   <p>Enjoy the event!</p>
                   <hr />
                   <small>This is an automated email from EventMasterPro.</small>
@@ -630,6 +690,20 @@ export async function registerRoutes(app: Express): Promise<Server> {
     }
   });
 
+  // Tickets routes
+  app.get("/api/tickets", async (req, res) => {
+    if (!req.isAuthenticated() || !req.user.isAdmin) {
+      return res.status(403).json({ message: "Unauthorized" });
+    }
+    
+    try {
+      const tickets = await storage.getTickets();
+      res.json(tickets);
+    } catch (error) {
+      res.status(500).json({ message: "Failed to fetch tickets" });
+    }
+  });
+
   app.post("/api/bookings", async (req, res) => {
     try {
       const validatedData = insertBookingSchema.parse({
@@ -646,7 +720,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
         return res.status(400).json({ message: "Not enough tickets available" });
       }
 
-      // Create booking
+      // Create booking without QR code (will be generated after payment)
       const booking = await storage.createBooking(validatedData);
 
       // Send booking confirmation email (payment pending)
@@ -667,7 +741,8 @@ export async function registerRoutes(app: Express): Promise<Server> {
               <li><strong>Booking Reference:</strong> ${booking.id}</li>
             <li><strong>Payment Status:</strong> Pending</li>
             </ul>
-          <p>Please complete your payment to secure your tickets. You will receive a payment confirmation email once the payment is processed.</p>
+          <p>Please complete your payment to secure your tickets. Once payment is completed, you will receive a confirmation email with your unique QR code for entry.</p>
+          <p><strong>Note:</strong> Your QR code will be generated and sent to you after successful payment completion.</p>
           <p>Booking Reference: ${booking.id}</p>
             <hr />
           <small>This is an automated email from EventMasterPro.</small>
@@ -680,6 +755,70 @@ export async function registerRoutes(app: Express): Promise<Server> {
         return res.status(400).json({ message: "Invalid booking data", errors: error.errors });
       }
       res.status(500).json({ message: "Failed to create booking" });
+    }
+  });
+
+  // QR Code scanning endpoint
+    app.post("/api/qr-scan", async (req, res) => {
+    if (!req.isAuthenticated() || !req.user.isAdmin) {
+      return res.status(403).json({ message: "Unauthorized" });
+    }
+
+    try {
+      const { qrCode } = req.body;
+
+      if (!qrCode) {
+        return res.status(400).json({ message: "QR code is required" });
+      }
+
+      // Find ticket by QR code
+      const ticket = await storage.getTicketByQRCode(qrCode);
+
+      if (!ticket) {
+        return res.status(404).json({ message: "Invalid QR code - ticket not found" });
+      }
+
+      if (ticket.isScanned) {
+        return res.status(400).json({
+          message: "QR code already scanned",
+          ticket: {
+            id: ticket.id,
+            ticketNumber: ticket.ticketNumber,
+            eventId: ticket.eventId,
+            scannedAt: ticket.scannedAt
+          }
+        });
+      }
+
+      // Get booking and event details for response
+      const booking = await storage.getBooking(ticket.bookingId);
+      const event = await storage.getEvent(ticket.eventId);
+
+      if (!booking || !event) {
+        return res.status(404).json({ message: "Booking or event not found" });
+      }
+
+      // Delete the ticket (remove from database as requested)
+      await storage.deleteTicketByQRCode(qrCode);
+
+      res.json({
+        success: true,
+        message: "Attendance marked successfully - QR code removed",
+        ticket: {
+          id: ticket.id,
+          ticketNumber: ticket.ticketNumber,
+          buyerName: booking.buyerName,
+          buyerEmail: booking.buyerEmail,
+          eventTitle: event.title,
+          eventDate: event.date,
+          venue: event.venue,
+          location: event.location
+        }
+      });
+
+    } catch (error) {
+      console.error('QR scan error:', error);
+      res.status(500).json({ message: "Failed to process QR code" });
     }
   });
 

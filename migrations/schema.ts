@@ -1,4 +1,4 @@
-import { pgTable, serial, text, timestamp, doublePrecision, integer, boolean, unique } from "drizzle-orm/pg-core"
+import { pgTable, serial, text, timestamp, doublePrecision, integer, boolean, unique, index, varchar, json } from "drizzle-orm/pg-core"
 import { sql } from "drizzle-orm"
 
 
@@ -36,17 +36,6 @@ export const seats = pgTable("seats", {
 	isBooked: boolean("is_booked").default(false).notNull(),
 });
 
-export const users = pgTable("users", {
-	id: serial().primaryKey().notNull(),
-	username: text().notNull(),
-	password: text().notNull(),
-	email: text().notNull(),
-	fullName: text("full_name").notNull(),
-	isAdmin: boolean("is_admin").default(false).notNull(),
-}, (table) => [
-	unique("users_username_unique").on(table.username),
-]);
-
 export const bookings = pgTable("bookings", {
 	id: serial().primaryKey().notNull(),
 	eventId: integer("event_id").notNull(),
@@ -66,6 +55,21 @@ export const bookings = pgTable("bookings", {
 	platformFee: doublePrecision("platform_fee").default(0),
 });
 
+export const users = pgTable("users", {
+	id: serial().primaryKey().notNull(),
+	username: text().notNull(),
+	password: text().notNull(),
+	email: text().notNull(),
+	fullName: text("full_name").notNull(),
+	isAdmin: boolean("is_admin").default(false).notNull(),
+	mpesaPhone: text("mpesa_phone"),
+	bankAccount: text("bank_account"),
+	payoutMethod: text("payout_method").default('mpesa'),
+	isVerified: boolean("is_verified").default(false).notNull(),
+}, (table) => [
+	unique("users_username_unique").on(table.username),
+]);
+
 export const commissionSettings = pgTable("commission_settings", {
 	id: serial().primaryKey().notNull(),
 	platformFeePercentage: doublePrecision("platform_fee_percentage").default(0.1).notNull(),
@@ -75,3 +79,11 @@ export const commissionSettings = pgTable("commission_settings", {
 	createdAt: timestamp("created_at", { mode: 'string' }).defaultNow().notNull(),
 	updatedAt: timestamp("updated_at", { mode: 'string' }).defaultNow().notNull(),
 });
+
+export const sessions = pgTable("sessions", {
+	sid: varchar().primaryKey().notNull(),
+	sess: json().notNull(),
+	expire: timestamp({ precision: 6, mode: 'string' }).notNull(),
+}, (table) => [
+	index("IDX_session_expire").using("btree", table.expire.asc().nullsLast().op("timestamp_ops")),
+]);

@@ -20,7 +20,8 @@ import {
   AlertTriangleIcon,
   SearchIcon,
   Loader2,
-  MenuIcon
+  MenuIcon,
+  CameraIcon
 } from "lucide-react";
 import { Link } from "wouter";
 import { Button } from "@/components/ui/button";
@@ -65,13 +66,15 @@ import { Label } from "@/components/ui/label";
 import { Separator } from "@/components/ui/separator";
 import { ScrollArea } from "@/components/ui/scroll-area";
 import { toast } from "@/hooks/use-toast";
-import { insertEventSchema, Event, Category, Booking, Seat, InsertEvent } from "@shared/schema";
+import { insertEventSchema, Event, Category, Booking, InsertEvent } from "@shared/schema";
 import { format } from "date-fns";
 import { apiRequest, queryClient } from "@/lib/queryClient";
 import { DateRange } from "react-day-picker";
 import { addDays, isAfter, isBefore, isSameDay } from "date-fns";
 import { Badge } from "@/components/ui/badge";
 import { Sheet, SheetContent, SheetTrigger } from "@/components/ui/sheet";
+import { QRScanner } from "@/components/ui/qr-scanner";
+import { useIsMobile } from "@/hooks/use-mobile";
 
 // Extend the event schema for the form
 const eventFormSchema = z.object({
@@ -110,6 +113,9 @@ export default function AdminPage() {
   const [filterStatus, setFilterStatus] = useState<string>("all");
   const [filterDateRange, setFilterDateRange] = useState<{ from: Date | undefined; to: Date | undefined }>({ from: undefined, to: undefined });
   const [mobileNavOpen, setMobileNavOpen] = useState(false);
+  const [isScanning, setIsScanning] = useState(false);
+  const [scannedResult, setScannedResult] = useState<string | null>(null);
+  const isMobile = useIsMobile();
 
   // Redirect if not an admin
   if (user && !user.isAdmin) {
@@ -382,6 +388,15 @@ export default function AdminPage() {
                   <Users className="h-5 w-5 mr-3" />
                   Users
                 </button>
+                {isMobile && (
+                  <button 
+                    className={`w-full flex items-center text-left py-2 px-4 rounded ${activeTab === "qr-scanner" ? "bg-slate-700" : "hover:bg-slate-700"}`}
+                    onClick={() => { setActiveTab("qr-scanner"); setMobileNavOpen(false); }}
+                  >
+                    <CameraIcon className="h-5 w-5 mr-3" />
+                    QR Scanner
+                  </button>
+                )}
               </nav>
             </div>
             <div className="p-4 border-t border-slate-700">
@@ -444,6 +459,15 @@ export default function AdminPage() {
               <Users className="h-5 w-5 mr-3" />
               Users
             </button>
+            {isMobile && (
+              <button 
+                className={`w-full flex items-center text-left py-2 px-4 rounded ${activeTab === "qr-scanner" ? "bg-slate-700" : "hover:bg-slate-700"}`}
+                onClick={() => setActiveTab("qr-scanner")}
+              >
+                <CameraIcon className="h-5 w-5 mr-3" />
+                QR Scanner
+              </button>
+            )}
           </nav>
         </div>
         <div className="p-4 border-t border-slate-700">
@@ -475,6 +499,7 @@ export default function AdminPage() {
               {activeTab === "events" && "Manage Events"}
               {activeTab === "bookings" && "Manage Bookings"}
               {activeTab === "users" && "Manage Users"}
+              {activeTab === "qr-scanner" && "QR Code Scanner"}
             </h1>
           </div>
         </header>
@@ -1647,13 +1672,16 @@ export default function AdminPage() {
                           <th className="px-4 py-2 text-left text-xs font-medium text-slate-500 uppercase">Buyer Email</th>
                           <th className="px-4 py-2 text-left text-xs font-medium text-slate-500 uppercase">Tickets</th>
                           <th className="px-4 py-2 text-left text-xs font-medium text-slate-500 uppercase">Total Price</th>
+                          <th className="px-4 py-2 text-left text-xs font-medium text-slate-500 uppercase">Payment Status</th>
+                          <th className="px-4 py-2 text-left text-xs font-medium text-slate-500 uppercase">Attendance</th>
+                          <th className="px-4 py-2 text-left text-xs font-medium text-slate-500 uppercase">QR Code</th>
                           <th className="px-4 py-2 text-left text-xs font-medium text-slate-500 uppercase">Booking Date</th>
                         </tr>
                       </thead>
                       <tbody className="bg-white divide-y divide-slate-100">
                   {bookings.length === 0 ? (
                           <tr>
-                            <td colSpan={7} className="text-center py-8 text-slate-400">No bookings found.</td>
+                            <td colSpan={10} className="text-center py-8 text-slate-400">No bookings found.</td>
                           </tr>
                   ) : (
                           bookings.map(booking => {
@@ -1666,6 +1694,19 @@ export default function AdminPage() {
                                 <td className="px-4 py-2 text-sm text-slate-700">{booking.buyerEmail}</td>
                                 <td className="px-4 py-2 text-sm text-slate-700">{booking.ticketQuantity}</td>
                                 <td className="px-4 py-2 text-sm text-slate-700">${booking.totalPrice.toFixed(2)}</td>
+                                <td className="px-4 py-2 text-sm text-slate-700">
+                                  <Badge variant={booking.paymentStatus === 'completed' ? 'default' : 'secondary'}>
+                                    {booking.paymentStatus}
+                                  </Badge>
+                                </td>
+                                <td className="px-4 py-2 text-sm text-slate-700">
+                                  <Badge variant={booking.paymentStatus === 'completed' ? 'default' : 'secondary'}>
+                                    {booking.paymentStatus}
+                                  </Badge>
+                                </td>
+                                <td className="px-4 py-2 text-sm text-slate-700">
+                                  <span className="text-slate-400">See Tickets</span>
+                                </td>
                                 <td className="px-4 py-2 text-sm text-slate-700">{format(new Date(booking.bookingDate), 'yyyy-MM-dd HH:mm')}</td>
                               </tr>
                         );
@@ -1705,6 +1746,14 @@ export default function AdminPage() {
                                     {format(new Date(booking.bookingDate), 'MMM d, yyyy')}
                                   </span>
                                 </div>
+                                <div className="flex items-center gap-2 mt-2">
+                                  <Badge variant={booking.paymentStatus === 'completed' ? 'default' : 'secondary'}>
+                                    {booking.paymentStatus}
+                                  </Badge>
+                                </div>
+                                <div className="mt-2">
+                                  <p className="text-xs text-slate-500">Tickets: {booking.ticketQuantity}</p>
+                                </div>
                               </div>
                             </CardContent>
                           </Card>
@@ -1727,6 +1776,86 @@ export default function AdminPage() {
                 </p>
                 <Button>View User Management</Button>
               </div>
+            </TabsContent>
+            
+            <TabsContent value="qr-scanner">
+              {!isMobile ? (
+                <div className="p-8 text-center">
+                  <div className="mx-auto w-16 h-16 bg-slate-100 rounded-full flex items-center justify-center mb-4">
+                    <CameraIcon className="h-8 w-8 text-slate-400" />
+                  </div>
+                  <h3 className="text-lg font-medium mb-2">QR Code Scanner</h3>
+                  <p className="text-slate-500 max-w-md mx-auto mb-6">
+                    The QR code scanner is only available on mobile devices. Please use your phone to scan ticket QR codes.
+                  </p>
+                  <div className="text-sm text-slate-400">
+                    <p>• Open this admin panel on your mobile device</p>
+                    <p>• Navigate to the QR Scanner tab</p>
+                    <p>• Allow camera permissions when prompted</p>
+                  </div>
+                </div>
+              ) : (
+                <div className="space-y-6">
+                  <div className="text-center">
+                    <h3 className="text-lg font-medium mb-2">Scan Ticket QR Codes</h3>
+                    <p className="text-slate-500">
+                      Use your camera to scan QR codes from tickets to mark attendance
+                    </p>
+                  </div>
+                  
+                  <QRScanner
+                    onScan={async (result) => {
+                      setScannedResult(result);
+                      try {
+                        const response = await apiRequest("POST", "/api/qr-scan", { qrCode: result });
+                        const data = await response.json();
+                        
+                        if (response.ok) {
+                          toast({
+                            title: "Attendance Marked!",
+                            description: `${data.ticket.buyerName} - Ticket ${data.ticket.ticketNumber} - ${data.ticket.eventTitle}`,
+                          });
+                        } else {
+                          toast({
+                            title: "Scan Error",
+                            description: data.message,
+                            variant: "destructive",
+                          });
+                        }
+                      } catch (error) {
+                        toast({
+                          title: "Scan Failed",
+                          description: "Failed to process QR code",
+                          variant: "destructive",
+                        });
+                      }
+                    }}
+                    onError={(error) => {
+                      console.error('QR scan error:', error);
+                      toast({
+                        title: "Scanner Error",
+                        description: error,
+                        variant: "destructive",
+                      });
+                    }}
+                    isScanning={isScanning}
+                    onToggleScanning={() => setIsScanning(!isScanning)}
+                  />
+                  
+                  {scannedResult && (
+                    <Card>
+                      <CardHeader>
+                        <CardTitle>Last Scanned Result</CardTitle>
+                      </CardHeader>
+                      <CardContent>
+                        <p className="text-sm font-mono bg-slate-100 p-3 rounded break-all">
+                          {scannedResult}
+                        </p>
+                      </CardContent>
+                    </Card>
+                  )}
+                </div>
+              )}
             </TabsContent>
           </Tabs>
         </main>

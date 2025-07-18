@@ -3,10 +3,10 @@ import { users, type User, type InsertUser } from "@shared/schema";
 import { events, type Event, type InsertEvent } from "@shared/schema";
 import { categories, type Category, type InsertCategory } from "@shared/schema";
 import { bookings, type Booking, type InsertBooking } from "@shared/schema";
-import { eq, and } from 'drizzle-orm';
+import { tickets, type Ticket, type InsertTicket } from "@shared/schema";
+import { eq } from 'drizzle-orm';
 
 export interface IStorage {
-  getUser(id: number): Promise<User | undefined>;
   getUserById(id: number): Promise<User | undefined>;
   getUserByUsername(username: string): Promise<User | undefined>;
   getUserByEmail(email: string): Promise<User | undefined>;
@@ -29,13 +29,19 @@ export interface IStorage {
   getBookingsByUserId(userId: number): Promise<Booking[]>;
   createBooking(booking: InsertBooking): Promise<Booking>;
   updateBooking(id: number, booking: Partial<Booking>): Promise<Booking | undefined>;
+  
+  // Ticket operations
+  getTickets(): Promise<Ticket[]>;
+  getTicket(id: number): Promise<Ticket | undefined>;
+  getTicketByQRCode(qrCode: string): Promise<Ticket | undefined>;
+  getTicketsByBookingId(bookingId: number): Promise<Ticket[]>;
+  createTicket(ticket: InsertTicket): Promise<Ticket>;
+  updateTicket(id: number, ticket: Partial<Ticket>): Promise<Ticket | undefined>;
+  deleteTicket(id: number): Promise<boolean>;
+  deleteTicketByQRCode(qrCode: string): Promise<boolean>;
 }
 
 export const storage: IStorage = {
-  async getUser(id) {
-    const result = await db.select().from(users).where(eq(users.id, id));
-    return result[0];
-  },
   async getUserById(id) {
     const result = await db.select().from(users).where(eq(users.id, id));
     return result[0];
@@ -120,6 +126,7 @@ export const storage: IStorage = {
     const result = await db.select().from(bookings).where(eq(bookings.id, id));
     return result[0];
   },
+
   async getBookingsByUserId(userId) {
     // Note: This assumes bookings have a userId field or we can filter by buyer email
     // For now, we'll return all bookings since the current schema doesn't have userId
@@ -144,5 +151,42 @@ export const storage: IStorage = {
       console.error('DB update error:', error);
       throw error;
     }
+  },
+
+  // Ticket operations
+  async getTickets() {
+    return db.select().from(tickets);
+  },
+  async getTicket(id) {
+    const result = await db.select().from(tickets).where(eq(tickets.id, id));
+    return result[0];
+  },
+  async getTicketByQRCode(qrCode) {
+    const result = await db.select().from(tickets).where(eq(tickets.qrCode, qrCode));
+    return result[0];
+  },
+  async getTicketsByBookingId(bookingId) {
+    return db.select().from(tickets).where(eq(tickets.bookingId, bookingId));
+  },
+  async createTicket(ticket) {
+    const [created] = await db.insert(tickets).values(ticket).returning();
+    return created;
+  },
+  async updateTicket(id, ticketUpdate) {
+    try {
+      const [updated] = await db.update(tickets).set(ticketUpdate).where(eq(tickets.id, id)).returning();
+      return updated;
+    } catch (error) {
+      console.error('DB update error:', error);
+      throw error;
+    }
+  },
+  async deleteTicket(id) {
+    const result = await db.delete(tickets).where(eq(tickets.id, id)).returning();
+    return result.length > 0;
+  },
+  async deleteTicketByQRCode(qrCode) {
+    const result = await db.delete(tickets).where(eq(tickets.qrCode, qrCode)).returning();
+    return result.length > 0;
   },
 };

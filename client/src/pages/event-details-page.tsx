@@ -41,11 +41,6 @@ export default function EventDetailsPage() {
 
   // Handle buy tickets click
   const handleBuyTickets = () => {
-    if (!user) {
-      navigate("/auth");
-      return;
-    }
-
     // Check if event is sold out
     if (event && event.availableSeats === 0) {
       return;

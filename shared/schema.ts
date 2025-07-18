@@ -143,6 +143,34 @@ export const insertBookingSchema = createInsertSchema(bookings).pick({
 export type InsertBooking = z.infer<typeof insertBookingSchema>;
 export type Booking = typeof bookings.$inferSelect;
 
+// New tickets table for individual tickets with QR codes
+export const tickets = pgTable("tickets", {
+  id: serial("id").primaryKey(),
+  bookingId: integer("booking_id").notNull(), // Reference to booking
+  eventId: integer("event_id").notNull(), // Reference to event
+  ticketNumber: integer("ticket_number").notNull(), // Ticket number within the booking (1, 2, 3, etc.)
+  qrCode: text("qr_code").unique().notNull(), // Unique QR code for each ticket
+  isScanned: boolean("is_scanned").default(false).notNull(), // Whether QR code has been scanned
+  scannedAt: timestamp("scanned_at"), // When QR code was scanned
+  scannedBy: integer("scanned_by"), // Admin user ID who scanned it
+  attendanceStatus: text("attendance_status").default("not_attended").notNull(), // not_attended, attended, cancelled
+  createdAt: timestamp("created_at").defaultNow().notNull(),
+});
+
+export const insertTicketSchema = createInsertSchema(tickets).pick({
+  bookingId: true,
+  eventId: true,
+  ticketNumber: true,
+  qrCode: true,
+  isScanned: true,
+  scannedAt: true,
+  scannedBy: true,
+  attendanceStatus: true,
+});
+
+export type InsertTicket = z.infer<typeof insertTicketSchema>;
+export type Ticket = typeof tickets.$inferSelect;
+
 // Commission settings table
 export const commissionSettings = pgTable("commission_settings", {
   id: serial("id").primaryKey(),
