@@ -315,15 +315,16 @@ export class MpesaService {
 
       console.log(`📊 Webhook ResultCode: ${resultCode}, ResultDesc: ${resultDesc}`);
 
-      // M-Pesa success codes can be '0' or '1' depending on the API version
-      if (resultCode === '0' || resultCode === '1') {
+      // M-Pesa success codes: 0 = success, 1 = success (different API versions)
+      if (resultCode === 0 || resultCode === '0' || resultCode === 1 || resultCode === '1') {
         // Payment successful
-        const item = body.CallbackMetadata?.Item?.find((i: any) => i.Name === 'TransactionID');
+        const transactionItem = body.CallbackMetadata?.Item?.find((i: any) => i.Name === 'TransactionID') || 
+                               body.CallbackMetadata?.Item?.find((i: any) => i.Name === 'MpesaReceiptNumber');
         const amountItem = body.CallbackMetadata?.Item?.find((i: any) => i.Name === 'Amount');
         const phoneItem = body.CallbackMetadata?.Item?.find((i: any) => i.Name === 'PhoneNumber');
 
         console.log('✅ Payment successful, extracting metadata...');
-        console.log('📱 TransactionID:', item?.Value);
+        console.log('📱 TransactionID/Receipt:', transactionItem?.Value);
         console.log('💰 Amount:', amountItem?.Value);
         console.log('📞 Phone:', phoneItem?.Value);
 
@@ -332,7 +333,7 @@ export class MpesaService {
           checkoutRequestID,
           resultCode,
           resultDesc,
-          transactionId: item?.Value,
+          transactionId: transactionItem?.Value,
           amount: amountItem?.Value,
           phoneNumber: phoneItem?.Value
         };
