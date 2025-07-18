@@ -2,7 +2,7 @@ services:
   - type: web
     name: eventmasterpro
     env: node
-    buildCommand: npm install && npx puppeteer browsers install chrome --with-deps && npx puppeteer browsers install chrome
+    buildCommand: npm install && npm run build
     startCommand: npm start
     envVars:
       - key: NODE_ENV

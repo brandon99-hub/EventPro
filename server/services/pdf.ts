@@ -1,4 +1,5 @@
-import puppeteer from 'puppeteer';
+import React from 'react';
+import { Document, Page, Text, View, StyleSheet, pdf } from '@react-pdf/renderer';
 import QRCode from 'qrcode';
 import { Event, Booking, Ticket } from '../../shared/schema';
 
@@ -7,6 +8,111 @@ export interface TicketReceiptData {
   event: Event;
   tickets: Ticket[];
 }
+
+// Create styles
+const styles = StyleSheet.create({
+  page: {
+    flexDirection: 'column',
+    backgroundColor: '#ffffff',
+    padding: 30,
+  },
+  header: {
+    backgroundColor: '#667eea',
+    color: 'white',
+    padding: 20,
+    textAlign: 'center',
+    marginBottom: 20,
+  },
+  title: {
+    fontSize: 24,
+    fontWeight: 'bold',
+    marginBottom: 5,
+  },
+  subtitle: {
+    fontSize: 14,
+    opacity: 0.9,
+  },
+  section: {
+    marginBottom: 20,
+    padding: 15,
+    backgroundColor: '#f8f9fa',
+    borderRadius: 5,
+  },
+  sectionTitle: {
+    fontSize: 16,
+    fontWeight: 'bold',
+    marginBottom: 10,
+    color: '#333',
+  },
+  row: {
+    flexDirection: 'row',
+    justifyContent: 'space-between',
+    marginBottom: 5,
+  },
+  label: {
+    fontSize: 12,
+    color: '#666',
+    fontWeight: 'bold',
+  },
+  value: {
+    fontSize: 12,
+    color: '#333',
+  },
+  ticketSection: {
+    marginTop: 20,
+  },
+  ticket: {
+    border: '1px solid #ddd',
+    padding: 15,
+    marginBottom: 15,
+    borderRadius: 5,
+  },
+  ticketTitle: {
+    fontSize: 14,
+    fontWeight: 'bold',
+    marginBottom: 10,
+    textAlign: 'center',
+  },
+  qrCode: {
+    textAlign: 'center',
+    marginVertical: 10,
+  },
+  qrText: {
+    fontSize: 10,
+    color: '#666',
+    textAlign: 'center',
+    marginTop: 5,
+  },
+  footer: {
+    marginTop: 30,
+    padding: 15,
+    backgroundColor: '#f8f9fa',
+    textAlign: 'center',
+    borderTop: '1px solid #ddd',
+  },
+  footerText: {
+    fontSize: 10,
+    color: '#666',
+    marginBottom: 3,
+  },
+  important: {
+    backgroundColor: '#fff3cd',
+    border: '1px solid #ffeaa7',
+    padding: 10,
+    marginVertical: 10,
+    borderRadius: 3,
+  },
+  importantTitle: {
+    fontSize: 12,
+    fontWeight: 'bold',
+    color: '#856404',
+    marginBottom: 5,
+  },
+  importantText: {
+    fontSize: 10,
+    color: '#856404',
+  },
+});
 
 export class PDFService {
   private async generateQRCodeDataURL(text: string): Promise<string> {
@@ -37,287 +143,109 @@ export class PDFService {
       }))
     );
 
-    // Launch browser with Render-specific settings
-    const browser = await puppeteer.launch({
-      headless: true,
-      args: [
-        '--no-sandbox',
-        '--disable-setuid-sandbox',
-        '--disable-dev-shm-usage',
-        '--disable-accelerated-2d-canvas',
-        '--no-first-run',
-        '--no-zygote',
-        '--single-process',
-        '--disable-gpu'
-      ],
-      executablePath: '/opt/render/.cache/puppeteer/chrome/linux-138.0.7204.157/chrome-linux64/chrome'
-    });
+    // Create PDF document
+    const MyDocument = () => (
+      React.createElement(Document, null,
+        React.createElement(Page, { size: "A4", style: styles.page },
+          // Header
+          React.createElement(View, { style: styles.header },
+            React.createElement(Text, { style: styles.title }, "🎫 Event Ticket Receipt"),
+            React.createElement(Text, { style: styles.subtitle }, `Payment Confirmed • ${new Date().toLocaleDateString()}`)
+          ),
 
-    const html = `
-      <!DOCTYPE html>
-      <html>
-      <head>
-        <meta charset="UTF-8">
-        <title>Event Ticket Receipt</title>
-        <style>
-          body {
-            font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif;
-            margin: 0;
-            padding: 20px;
-            background: #f8f9fa;
-          }
-          .receipt {
-            max-width: 800px;
-            margin: 0 auto;
-            background: white;
-            border-radius: 12px;
-            box-shadow: 0 4px 6px rgba(0, 0, 0, 0.1);
-            overflow: hidden;
-          }
-          .header {
-            background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
-            color: white;
-            padding: 30px;
-            text-align: center;
-          }
-          .header h1 {
-            margin: 0;
-            font-size: 28px;
-            font-weight: 600;
-          }
-          .header p {
-            margin: 10px 0 0 0;
-            opacity: 0.9;
-            font-size: 16px;
-          }
-          .content {
-            padding: 30px;
-          }
-          .event-details {
-            background: #f8f9fa;
-            padding: 20px;
-            border-radius: 8px;
-            margin-bottom: 30px;
-          }
-          .event-details h2 {
-            margin: 0 0 15px 0;
-            color: #333;
-            font-size: 20px;
-          }
-          .event-info {
-            display: grid;
-            grid-template-columns: 1fr 1fr;
-            gap: 15px;
-            margin-bottom: 20px;
-          }
-          .event-info div {
-            display: flex;
-            align-items: center;
-          }
-          .event-info strong {
-            min-width: 120px;
-            color: #555;
-          }
-          .event-info span {
-            color: #333;
-          }
-          .booking-info {
-            background: #e8f4fd;
-            padding: 20px;
-            border-radius: 8px;
-            margin-bottom: 30px;
-          }
-          .booking-info h3 {
-            margin: 0 0 15px 0;
-            color: #333;
-            font-size: 18px;
-          }
-          .booking-details {
-            display: grid;
-            grid-template-columns: 1fr 1fr;
-            gap: 15px;
-          }
-          .booking-details div {
-            display: flex;
-            align-items: center;
-          }
-          .booking-details strong {
-            min-width: 140px;
-            color: #555;
-          }
-          .booking-details span {
-            color: #333;
-          }
-          .tickets-section {
-            margin-bottom: 30px;
-          }
-          .tickets-section h3 {
-            margin: 0 0 20px 0;
-            color: #333;
-            font-size: 18px;
-            text-align: center;
-          }
-          .tickets-grid {
-            display: grid;
-            grid-template-columns: repeat(auto-fit, minmax(300px, 1fr));
-            gap: 20px;
-          }
-          .ticket {
-            border: 2px solid #ddd;
-            border-radius: 8px;
-            padding: 20px;
-            text-align: center;
-            background: white;
-          }
-          .ticket h4 {
-            margin: 0 0 15px 0;
-            color: #333;
-            font-size: 16px;
-          }
-          .ticket-qr {
-            margin: 15px 0;
-          }
-          .ticket-qr img {
-            border: 2px solid #000;
-            padding: 8px;
-            background: white;
-            border-radius: 4px;
-          }
-          .ticket-code {
-            font-family: monospace;
-            font-size: 12px;
-            color: #666;
-            margin-top: 10px;
-            word-break: break-all;
-          }
-          .footer {
-            background: #f8f9fa;
-            padding: 20px;
-            text-align: center;
-            border-top: 1px solid #ddd;
-          }
-          .footer p {
-            margin: 5px 0;
-            color: #666;
-            font-size: 14px;
-          }
-          .important-note {
-            background: #fff3cd;
-            border: 1px solid #ffeaa7;
-            border-radius: 6px;
-            padding: 15px;
-            margin: 20px 0;
-          }
-          .important-note h4 {
-            margin: 0 0 10px 0;
-            color: #856404;
-            font-size: 16px;
-          }
-          .important-note p {
-            margin: 0;
-            color: #856404;
-            font-size: 14px;
-          }
-          @media print {
-            body { background: white; }
-            .receipt { box-shadow: none; }
-          }
-        </style>
-      </head>
-      <body>
-        <div class="receipt">
-          <div class="header">
-            <h1>🎫 Event Ticket Receipt</h1>
-            <p>Payment Confirmed • ${new Date().toLocaleDateString()}</p>
-          </div>
-          
-          <div class="content">
-            <div class="event-details">
-              <h2>📅 Event Information</h2>
-              <div class="event-info">
-                <div><strong>Event Name:</strong> <span>${event.title}</span></div>
-                <div><strong>Date & Time:</strong> <span>${new Date(event.date).toLocaleString()}</span></div>
-                <div><strong>Venue:</strong> <span>${event.venue}</span></div>
-                <div><strong>Location:</strong> <span>${event.location}</span></div>
-                                 <div><strong>Category ID:</strong> <span>${event.categoryId}</span></div>
-                 <div><strong>Created By:</strong> <span>${event.createdBy}</span></div>
-              </div>
-              <p style="margin: 15px 0 0 0; color: #666; font-size: 14px;">
-                ${event.description}
-              </p>
-            </div>
+          // Event Details
+          React.createElement(View, { style: styles.section },
+            React.createElement(Text, { style: styles.sectionTitle }, "📅 Event Information"),
+            React.createElement(View, { style: styles.row },
+              React.createElement(Text, { style: styles.label }, "Event Name:"),
+              React.createElement(Text, { style: styles.value }, event.title)
+            ),
+            React.createElement(View, { style: styles.row },
+              React.createElement(Text, { style: styles.label }, "Date & Time:"),
+              React.createElement(Text, { style: styles.value }, new Date(event.date).toLocaleString())
+            ),
+            React.createElement(View, { style: styles.row },
+              React.createElement(Text, { style: styles.label }, "Venue:"),
+              React.createElement(Text, { style: styles.value }, event.venue)
+            ),
+            React.createElement(View, { style: styles.row },
+              React.createElement(Text, { style: styles.label }, "Location:"),
+              React.createElement(Text, { style: styles.value }, event.location)
+            )
+          ),
 
-            <div class="booking-info">
-              <h3>💰 Payment Details</h3>
-              <div class="booking-details">
-                <div><strong>Booking Reference:</strong> <span>#${booking.id}</span></div>
-                <div><strong>Buyer Name:</strong> <span>${booking.buyerName}</span></div>
-                <div><strong>Email:</strong> <span>${booking.buyerEmail}</span></div>
-                <div><strong>Phone:</strong> <span>${booking.buyerPhone}</span></div>
-                <div><strong>Number of Tickets:</strong> <span>${booking.ticketQuantity}</span></div>
-                <div><strong>Total Amount:</strong> <span>KES ${booking.totalPrice}</span></div>
-                <div><strong>Payment Method:</strong> <span>M-Pesa</span></div>
-                <div><strong>Payment Date:</strong> <span>${new Date(booking.paymentDate || new Date()).toLocaleString()}</span></div>
-              </div>
-            </div>
+          // Payment Details
+          React.createElement(View, { style: styles.section },
+            React.createElement(Text, { style: styles.sectionTitle }, "💰 Payment Details"),
+            React.createElement(View, { style: styles.row },
+              React.createElement(Text, { style: styles.label }, "Booking Reference:"),
+              React.createElement(Text, { style: styles.value }, `#${booking.id}`)
+            ),
+            React.createElement(View, { style: styles.row },
+              React.createElement(Text, { style: styles.label }, "Buyer Name:"),
+              React.createElement(Text, { style: styles.value }, booking.buyerName)
+            ),
+            React.createElement(View, { style: styles.row },
+              React.createElement(Text, { style: styles.label }, "Email:"),
+              React.createElement(Text, { style: styles.value }, booking.buyerEmail)
+            ),
+            React.createElement(View, { style: styles.row },
+              React.createElement(Text, { style: styles.label }, "Phone:"),
+              React.createElement(Text, { style: styles.value }, booking.buyerPhone)
+            ),
+            React.createElement(View, { style: styles.row },
+              React.createElement(Text, { style: styles.label }, "Number of Tickets:"),
+              React.createElement(Text, { style: styles.value }, booking.ticketQuantity.toString())
+            ),
+            React.createElement(View, { style: styles.row },
+              React.createElement(Text, { style: styles.label }, "Total Amount:"),
+              React.createElement(Text, { style: styles.value }, `KES ${booking.totalPrice}`)
+            ),
+            React.createElement(View, { style: styles.row },
+              React.createElement(Text, { style: styles.label }, "Payment Method:"),
+              React.createElement(Text, { style: styles.value }, "M-Pesa")
+            ),
+            React.createElement(View, { style: styles.row },
+              React.createElement(Text, { style: styles.label }, "Payment Date:"),
+              React.createElement(Text, { style: styles.value }, new Date(booking.paymentDate || new Date()).toLocaleString())
+            )
+          ),
 
-            <div class="important-note">
-              <h4>⚠️ Important Information</h4>
-              <p>• Each ticket has a unique QR code that can only be used once</p>
-              <p>• Please save this receipt and show the appropriate QR code at the entrance</p>
-              <p>• Keep this receipt as proof of payment</p>
-            </div>
+          // Important Information
+          React.createElement(View, { style: styles.important },
+            React.createElement(Text, { style: styles.importantTitle }, "⚠️ Important Information"),
+            React.createElement(Text, { style: styles.importantText }, "• Each ticket has a unique QR code that can only be used once"),
+            React.createElement(Text, { style: styles.importantText }, "• Please save this receipt and show the appropriate QR code at the entrance"),
+            React.createElement(Text, { style: styles.importantText }, "• Keep this receipt as proof of payment")
+          ),
 
-            <div class="tickets-section">
-              <h3>🎫 Your Tickets</h3>
-              <div class="tickets-grid">
-                ${ticketsWithQR.map(ticket => `
-                  <div class="ticket">
-                    <h4>Ticket ${ticket.ticketNumber}</h4>
-                    <div class="ticket-qr">
-                      <img src="${ticket.qrCodeImage}" alt="QR Code for Ticket ${ticket.ticketNumber}" />
-                    </div>
-                    <div class="ticket-code">
-                      <strong>QR Code:</strong><br>
-                      ${ticket.qrCode}
-                    </div>
-                  </div>
-                `).join('')}
-              </div>
-            </div>
-          </div>
+          // Tickets
+          React.createElement(View, { style: styles.ticketSection },
+            React.createElement(Text, { style: styles.sectionTitle }, "🎫 Your Tickets"),
+            ...ticketsWithQR.map((ticket, index) =>
+              React.createElement(View, { key: index, style: styles.ticket },
+                React.createElement(Text, { style: styles.ticketTitle }, `Ticket ${ticket.ticketNumber}`),
+                React.createElement(View, { style: styles.qrCode },
+                  React.createElement(Text, { style: styles.qrText }, `QR Code: ${ticket.qrCode}`)
+                )
+              )
+            )
+          ),
 
-          <div class="footer">
-            <p><strong>EventMasterPro</strong> - Your trusted event ticketing platform</p>
-            <p>Thank you for your purchase! Enjoy the event!</p>
-            <p style="font-size: 12px; margin-top: 10px;">
-              This is an automated receipt. For support, contact admin@eventhub.com
-            </p>
-          </div>
-        </div>
-      </body>
-      </html>
-    `;
+          // Footer
+          React.createElement(View, { style: styles.footer },
+            React.createElement(Text, { style: styles.footerText }, "EventMasterPro - Your trusted event ticketing platform"),
+            React.createElement(Text, { style: styles.footerText }, "Thank you for your purchase! Enjoy the event!"),
+            React.createElement(Text, { style: styles.footerText }, "This is an automated receipt. For support, contact admin@eventhub.com")
+          )
+        )
+      )
+    );
 
     try {
-      // Browser is already launched above with Render-specific settings
-      
-      const page = await browser.newPage();
-      await page.setContent(html, { waitUntil: 'networkidle0' });
-      
-      const pdfBuffer = await page.pdf({
-        format: 'A4',
-        printBackground: true,
-        margin: {
-          top: '20px',
-          right: '20px',
-          bottom: '20px',
-          left: '20px'
-        }
-      });
-      
-      await browser.close();
-      return Buffer.from(pdfBuffer);
+      // Generate PDF buffer
+      const pdfBuffer = await pdf(MyDocument()).toBuffer();
+      return Buffer.from(await pdfBuffer.arrayBuffer());
     } catch (error) {
       console.error('Failed to generate PDF:', error);
       throw new Error('Failed to generate PDF receipt');
