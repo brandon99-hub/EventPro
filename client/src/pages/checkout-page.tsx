@@ -124,8 +124,14 @@ export default function CheckoutPage() {
         if (statusResult.success && statusResult.status === "completed") {
           setCurrentStep("success");
           toast({
-            title: "Payment successful!",
-            description: "Your tickets have been booked and payment completed.",
+            title: "Payment confirmed!",
+            description: "Your payment has been processed successfully.",
+          });
+        } else if (statusResult.success && statusResult.status === "pending") {
+          setCurrentStep("success");
+          toast({
+            title: "Payment initiated!",
+            description: statusResult.errorMessage || "Please check your email for confirmation once payment is processed.",
           });
         } else {
           setCurrentStep("failed");
@@ -380,9 +386,9 @@ export default function CheckoutPage() {
                   <div className="w-16 h-16 sm:w-20 sm:h-20 rounded-full bg-green-100 mx-auto flex items-center justify-center">
                     <CheckIcon className="h-8 w-8 sm:h-10 sm:w-10 text-green-600" />
                   </div>
-                  <CardTitle className="text-xl sm:text-2xl mt-4">Booking Confirmed!</CardTitle>
+                  <CardTitle className="text-xl sm:text-2xl mt-4">Payment Initiated!</CardTitle>
                   <CardDescription className="text-base">
-                Your tickets for {event.title} have been booked successfully.
+                Your payment has been initiated successfully. Please check your email for confirmation once payment is processed.
               </CardDescription>
             </CardHeader>
             <CardContent className="space-y-4">
@@ -395,7 +401,36 @@ export default function CheckoutPage() {
                     <p className="text-slate-600 text-sm sm:text-base">Enjoy the event!</p>
               </div>
             </CardContent>
-            <CardFooter className="flex justify-center">
+            <CardFooter className="flex flex-col gap-3">
+              <Button 
+                onClick={async () => {
+                  if (checkoutRequestID) {
+                    try {
+                      const status = await paymentService.checkPaymentStatus(checkoutRequestID);
+                      if (status.status === 'completed') {
+                        toast({
+                          title: "Payment confirmed!",
+                          description: "Your payment has been processed successfully.",
+                        });
+                      } else {
+                        toast({
+                          title: "Payment still processing",
+                          description: "Please check your email for confirmation once payment is processed.",
+                        });
+                      }
+                    } catch (error) {
+                      toast({
+                        title: "Status check failed",
+                        description: "Please check your email for confirmation.",
+                      });
+                    }
+                  }
+                }}
+                variant="outline"
+                className="h-12 text-base px-8"
+              >
+                Check Payment Status
+              </Button>
               <Link href="/events">
                     <Button className="h-12 text-base px-8">Back to Events</Button>
               </Link>

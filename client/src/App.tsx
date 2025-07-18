@@ -23,7 +23,7 @@ function Router() {
       <Route path="/events/:id" component={EventDetailsPage} />
       <Route path="/calendar" component={CalendarPage} />
       <Route path="/auth" component={AuthPage} />
-      <ProtectedRoute path="/checkout/:eventId" component={CheckoutPage} />
+      <Route path="/checkout/:eventId" component={CheckoutPage} />
       <ProtectedRoute path="/dashboard" component={UserDashboard} />
       <ProtectedRoute path="/admin" component={AdminPage} />
       <Route component={NotFound} />

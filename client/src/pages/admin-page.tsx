@@ -494,7 +494,7 @@ export default function AdminPage() {
       <div className="flex-1 overflow-auto w-full">
         <header className="bg-white shadow flex items-center px-2 sm:px-6">
           <div className="flex-1 py-4">
-            <h1 className="text-2xl font-bold text-slate-900">
+            <h1 className="text-xl sm:text-2xl font-bold text-slate-900">
               {activeTab === "dashboard" && "Admin Dashboard"}
               {activeTab === "events" && "Manage Events"}
               {activeTab === "bookings" && "Manage Bookings"}
@@ -664,11 +664,11 @@ export default function AdminPage() {
                   />
                 </div>
                 
-                {/* Filter Controls - Stack vertically on mobile */}
-                <div className="flex flex-col sm:flex-row gap-3 sm:gap-4 sm:items-center">
+                {/* Filter Controls - Grid layout for mobile */}
+                <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-3">
                   {/* Category Filter */}
                   <Select value={filterCategory} onValueChange={setFilterCategory}>
-                    <SelectTrigger className="w-full sm:w-40 h-12">
+                    <SelectTrigger className="h-12">
                       <SelectValue placeholder="All Categories" />
                     </SelectTrigger>
                     <SelectContent>
@@ -681,7 +681,7 @@ export default function AdminPage() {
                   
                   {/* Status Filter */}
                   <Select value={filterStatus} onValueChange={setFilterStatus}>
-                    <SelectTrigger className="w-full sm:w-36 h-12">
+                    <SelectTrigger className="h-12">
                       <SelectValue />
                     </SelectTrigger>
                     <SelectContent>
@@ -692,27 +692,29 @@ export default function AdminPage() {
                     </SelectContent>
                   </Select>
                   
-                  {/* Date Range Filter - Stack vertically on mobile */}
-                  <div className="flex flex-col sm:flex-row gap-2 sm:items-center">
-                    <span className="text-sm text-slate-600 hidden sm:block">Date:</span>
-                    <div className="flex flex-col sm:flex-row gap-2">
+                  {/* Date Range Filter */}
+                  <div className="flex flex-col gap-2">
+                    <span className="text-sm text-slate-600">From:</span>
                     <Input
                       type="date"
                       value={filterDateRange.from ? filterDateRange.from.toISOString().slice(0, 10) : ""}
                       onChange={e => setFilterDateRange(r => ({ ...r, from: e.target.value ? new Date(e.target.value) : undefined }))}
-                        className="w-full sm:w-36 h-12"
-                        placeholder="From date"
+                      className="h-12"
+                      placeholder="From date"
                     />
-                      <span className="text-slate-400 hidden sm:block">-</span>
+                  </div>
+                  
+                  {/* To Date Filter */}
+                  <div className="flex flex-col gap-2">
+                    <span className="text-sm text-slate-600">To:</span>
                     <Input
                       type="date"
                       value={filterDateRange.to ? filterDateRange.to.toISOString().slice(0, 10) : ""}
                       onChange={e => setFilterDateRange(r => ({ ...r, to: e.target.value ? new Date(e.target.value) : undefined }))}
-                        className="w-full sm:w-36 h-12"
-                        placeholder="To date"
+                      className="h-12"
+                      placeholder="To date"
                     />
                   </div>
-                </div>
                 </div>
                 
                 {/* Add Event Button */}
@@ -1788,62 +1790,65 @@ export default function AdminPage() {
                   <p className="text-slate-500 max-w-md mx-auto mb-6">
                     The QR code scanner is only available on mobile devices. Please use your phone to scan ticket QR codes.
                   </p>
-                  <div className="text-sm text-slate-400">
+                  <div className="text-sm text-slate-400 space-y-1">
                     <p>• Open this admin panel on your mobile device</p>
                     <p>• Navigate to the QR Scanner tab</p>
                     <p>• Allow camera permissions when prompted</p>
+                    <p>• Point camera at ticket QR codes</p>
                   </div>
                 </div>
               ) : (
-                <div className="space-y-6">
+                <div className="space-y-6 p-4">
                   <div className="text-center">
-                    <h3 className="text-lg font-medium mb-2">Scan Ticket QR Codes</h3>
+                    <h3 className="text-xl font-medium mb-2">Scan Ticket QR Codes</h3>
                     <p className="text-slate-500">
                       Use your camera to scan QR codes from tickets to mark attendance
                     </p>
                   </div>
                   
-                  <QRScanner
-                    onScan={async (result) => {
-                      setScannedResult(result);
-                      try {
-                        const response = await apiRequest("POST", "/api/qr-scan", { qrCode: result });
-                        const data = await response.json();
-                        
-                        if (response.ok) {
+                  <div className="max-w-md mx-auto">
+                    <QRScanner
+                      onScan={async (result) => {
+                        setScannedResult(result);
+                        try {
+                          const response = await apiRequest("POST", "/api/qr-scan", { qrCode: result });
+                          const data = await response.json();
+                          
+                          if (response.ok) {
+                            toast({
+                              title: "Attendance Marked!",
+                              description: `${data.ticket.buyerName} - Ticket ${data.ticket.ticketNumber} - ${data.ticket.eventTitle}`,
+                            });
+                          } else {
+                            toast({
+                              title: "Scan Error",
+                              description: data.message,
+                              variant: "destructive",
+                            });
+                          }
+                        } catch (error) {
                           toast({
-                            title: "Attendance Marked!",
-                            description: `${data.ticket.buyerName} - Ticket ${data.ticket.ticketNumber} - ${data.ticket.eventTitle}`,
-                          });
-                        } else {
-                          toast({
-                            title: "Scan Error",
-                            description: data.message,
+                            title: "Scan Failed",
+                            description: "Failed to process QR code",
                             variant: "destructive",
                           });
                         }
-                      } catch (error) {
+                      }}
+                      onError={(error) => {
+                        console.error('QR scan error:', error);
                         toast({
-                          title: "Scan Failed",
-                          description: "Failed to process QR code",
+                          title: "Scanner Error",
+                          description: error,
                           variant: "destructive",
                         });
-                      }
-                    }}
-                    onError={(error) => {
-                      console.error('QR scan error:', error);
-                      toast({
-                        title: "Scanner Error",
-                        description: error,
-                        variant: "destructive",
-                      });
-                    }}
-                    isScanning={isScanning}
-                    onToggleScanning={() => setIsScanning(!isScanning)}
-                  />
+                      }}
+                      isScanning={isScanning}
+                      onToggleScanning={() => setIsScanning(!isScanning)}
+                    />
+                  </div>
                   
                   {scannedResult && (
-                    <Card>
+                    <Card className="max-w-md mx-auto">
                       <CardHeader>
                         <CardTitle>Last Scanned Result</CardTitle>
                       </CardHeader>

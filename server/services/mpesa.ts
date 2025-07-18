@@ -50,8 +50,9 @@ export class MpesaService {
   private async getAccessToken(): Promise<string> {
     try {
       const auth = Buffer.from(`${this.config.consumerKey}:${this.config.consumerSecret}`).toString('base64');
+      const url = `${this.baseUrl}/oauth/v1/generate?grant_type=client_credentials`;
       
-      const response = await axios.get(`${this.baseUrl}/oauth/v1/generate?grant_type=client_credentials`, {
+      const response = await axios.get(url, {
         headers: {
           'Authorization': `Basic ${auth}`,
           'Content-Type': 'application/json'
@@ -59,8 +60,8 @@ export class MpesaService {
       });
 
       return response.data.access_token;
-    } catch (error) {
-      console.error('Failed to get M-Pesa access token:', error);
+    } catch (error: any) {
+      console.error('Failed to get M-Pesa access token:', error.message);
       throw new Error('Failed to authenticate with M-Pesa API');
     }
   }
@@ -148,7 +149,7 @@ export class MpesaService {
 
       const result = response.data;
 
-      if (result.ResultCode === '0') {
+      if (result.ResponseCode === '0') {
         return {
           success: true,
           checkoutRequestID: result.CheckoutRequestID,
@@ -156,17 +157,45 @@ export class MpesaService {
           customerMessage: result.CustomerMessage
         };
       } else {
+        console.log('M-Pesa error:', result.ResponseCode, result.ResponseDescription);
         return {
           success: false,
-          errorCode: result.ResultCode,
-          errorMessage: result.ResultDesc
+          errorCode: result.ResponseCode,
+          errorMessage: result.ResponseDescription
         };
       }
-    } catch (error) {
-      console.error('STK Push failed:', error);
+    } catch (error: any) {
+      console.error("💥 Error in initiateSTKPush:", error);
+      console.error("Error type:", typeof error);
+      console.error("Error message:", error?.message);
+      console.error("Error stack:", error?.stack);
+      
+      // Try to extract from Axios error
+      if (error.isAxiosError && error.response) {
+        console.error("📡 Axios error response:", JSON.stringify(error.response.data, null, 2));
+        console.error("📡 Axios error status:", error.response.status);
+        console.error("📡 Axios error headers:", error.response.headers);
+        
+        const errorData = error.response.data;
+        const errorCode = errorData?.errorCode || errorData?.ResultCode || error.response.status?.toString();
+        const errorMessage = errorData?.errorMessage || errorData?.ResultDesc || errorData?.message || error.response.statusText || 'Payment initiation failed';
+        
+        console.error("🔍 Extracted error code:", errorCode);
+        console.error("🔍 Extracted error message:", errorMessage);
+        
+        return {
+          success: false,
+          errorCode,
+          errorMessage
+        };
+      }
+      
+      // Fallback: log error as string and all enumerable properties
+      console.error("🔍 Fallback error handling");
       return {
         success: false,
-        errorMessage: 'Failed to initiate payment'
+        errorCode: 'UNKNOWN_ERROR',
+        errorMessage: error && error.message ? error.message : String(error) || 'Failed to initiate payment'
       };
     }
   }
@@ -218,8 +247,40 @@ export class MpesaService {
           errorMessage: result.ResultDesc
         };
       }
-    } catch (error) {
+    } catch (error: any) {
       console.error('Payment status check failed:', error);
+      
+      // Handle the case where M-Pesa returns 500 with "transaction is being processed"
+      if (error.isAxiosError && error.response?.status === 500) {
+        const errorData = error.response.data;
+        if (errorData?.errorMessage === 'The transaction is being processed' || 
+            errorData?.errorCode === '500.001.1001') {
+          console.log('🔄 Transaction is still being processed, treating as pending');
+          return {
+            success: true,
+            status: 'pending'
+          };
+        }
+      }
+      
+      // Handle rate limiting (403 errors)
+      if (error.isAxiosError && error.response?.status === 403) {
+        console.log('⚠️ Rate limited by M-Pesa API, treating as pending');
+        return {
+          success: true,
+          status: 'pending'
+        };
+      }
+      
+      // Handle authentication errors
+      if (error.isAxiosError && error.response?.status === 401) {
+        console.log('🔐 Authentication failed, treating as pending');
+        return {
+          success: true,
+          status: 'pending'
+        };
+      }
+      
       return {
         success: false,
         status: 'failed',
@@ -280,12 +341,62 @@ export class MpesaService {
   }
 }
 
-// Create M-Pesa service instance
-export const mpesaService = new MpesaService({
-  consumerKey: process.env.MPESA_CONSUMER_KEY!,
-  consumerSecret: process.env.MPESA_CONSUMER_SECRET!,
-  shortcode: process.env.MPESA_SHORTCODE!,
-  passkey: process.env.MPESA_PASSKEY!,
-  environment: (process.env.MPESA_ENVIRONMENT as 'sandbox' | 'production') || 'sandbox',
-  callbackUrl: process.env.MPESA_CALLBACK_URL!
-}); 
+// Create M-Pesa service instance with lazy initialization
+let mpesaServiceInstance: MpesaService | null = null;
+
+export function getMpesaService(): MpesaService {
+  if (mpesaServiceInstance) {
+    return mpesaServiceInstance;
+  }
+  
+  console.log("🔧 Initializing M-Pesa service...");
+  
+  // Check environment variables
+  const config = {
+    consumerKey: process.env.MPESA_CONSUMER_KEY,
+    consumerSecret: process.env.MPESA_CONSUMER_SECRET,
+    shortcode: process.env.MPESA_SHORTCODE,
+    passkey: process.env.MPESA_PASSKEY,
+    environment: (process.env.MPESA_ENVIRONMENT as 'sandbox' | 'production') || 'sandbox',
+    callbackUrl: process.env.MPESA_CALLBACK_URL || 'http://localhost:5000/api/payments/mpesa/callback'
+  };
+  
+  console.log("📋 M-Pesa config:", {
+    consumerKey: config.consumerKey ? '***SET***' : 'MISSING',
+    consumerSecret: config.consumerSecret ? '***SET***' : 'MISSING',
+    shortcode: config.shortcode || 'MISSING',
+    passkey: config.passkey ? '***SET***' : 'MISSING',
+    environment: config.environment,
+    callbackUrl: config.callbackUrl
+  });
+  
+  // Validate required fields
+  if (!config.consumerKey || !config.consumerSecret || !config.shortcode || !config.passkey) {
+    throw new Error('Missing required M-Pesa environment variables');
+  }
+  
+  // Create new instance
+  mpesaServiceInstance = new MpesaService({
+    consumerKey: config.consumerKey,
+    consumerSecret: config.consumerSecret,
+    shortcode: config.shortcode,
+    passkey: config.passkey,
+    environment: config.environment,
+    callbackUrl: config.callbackUrl
+  } as MpesaConfig);
+  console.log("✅ M-Pesa service initialized successfully");
+  return mpesaServiceInstance;
+}
+
+// Export for backward compatibility - lazy initialization
+export const mpesaService = {
+  get initiateSTKPush() {
+    return getMpesaService().initiateSTKPush.bind(getMpesaService());
+  },
+  get checkPaymentStatus() {
+    return getMpesaService().checkPaymentStatus.bind(getMpesaService());
+  },
+  get processWebhook() {
+    return getMpesaService().processWebhook.bind(getMpesaService());
+  }
+}; 

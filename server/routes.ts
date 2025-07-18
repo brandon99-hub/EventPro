@@ -11,6 +11,7 @@ import { insertUserSchema, insertEventSchema, insertBookingSchema, insertCategor
 import { mpesaService } from "./services/mpesa";
 import { commissionService } from "./services/commission";
 import { mpesaPayoutService } from "./mpesa-payout";
+import { pdfService } from "./services/pdf";
 import pgSimple from "connect-pg-simple";
 
 // Create PostgreSQL session store
@@ -105,12 +106,13 @@ export async function registerRoutes(app: Express): Promise<Server> {
     try {
       const QRCode = await import('qrcode');
       return await QRCode.toDataURL(text, {
-        width: 200,
-        margin: 2,
+        width: 150,
+        margin: 1,
         color: {
           dark: '#000000',
           light: '#FFFFFF'
-        }
+        },
+        errorCorrectionLevel: 'M'
       });
     } catch (error) {
       console.error('Failed to generate QR code:', error);
@@ -119,7 +121,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
   };
 
   // Email service
-  const sendEmail = async (to: string, subject: string, html: string) => {
+  const sendEmail = async (to: string, subject: string, html: string, attachments?: any[]) => {
     if (!process.env.GMAIL_USER || !process.env.GMAIL_PASS) {
       console.warn("Email credentials not configured, skipping email send");
       return;
@@ -139,6 +141,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
         to,
         subject,
         html,
+        attachments,
       };
 
       await transporter.sendMail(mailOptions);
@@ -362,17 +365,17 @@ export async function registerRoutes(app: Express): Promise<Server> {
 
 
   // Payment routes
-  app.post("/api/payments/mpesa/initiate", async (req, res) => {
-    if (!req.isAuthenticated()) {
-      return res.status(401).json({ message: "Not authenticated" });
-    }
-
+    app.post("/api/payments/mpesa/initiate", async (req, res) => {
     try {
       const { phoneNumber, amount, reference, description } = req.body;
 
       // Validate input
       if (!phoneNumber || !amount || !reference || !description) {
-        return res.status(400).json({ message: "Missing required fields" });
+        return res.status(400).json({
+          success: false,
+          errorCode: 'VALIDATION_ERROR',
+          errorMessage: "Missing required fields"
+        });
       }
 
       // Initiate STK Push
@@ -384,7 +387,19 @@ export async function registerRoutes(app: Express): Promise<Server> {
       });
 
       if (result.success) {
-        res.json({
+        // Update booking with payment reference
+        const bookingId = parseInt(reference.replace('BOOKING-', ''));
+        try {
+          await storage.updateBooking(bookingId, {
+            paymentReference: result.checkoutRequestID,
+            paymentMethod: 'mpesa',
+            mpesaPhone: phoneNumber
+          });
+        } catch (updateError) {
+          console.error("Failed to update booking:", updateError);
+        }
+        
+                res.json({
           success: true,
           checkoutRequestID: result.checkoutRequestID,
           merchantRequestID: result.merchantRequestID,
@@ -393,26 +408,61 @@ export async function registerRoutes(app: Express): Promise<Server> {
       } else {
         res.status(400).json({
           success: false,
-          errorCode: result.errorCode,
-          errorMessage: result.errorMessage
+          errorCode: result.errorCode || 'UNKNOWN_ERROR',
+          errorMessage: result.errorMessage || 'Payment initiation failed'
         });
       }
     } catch (error) {
-      console.error('Payment initiation failed:', error);
-      res.status(500).json({ message: "Failed to initiate payment" });
+      console.error("Payment initiation error:", error instanceof Error ? error.message : String(error));
+      res.status(500).json({
+        success: false,
+        errorCode: 'INTERNAL_ERROR',
+        errorMessage: "Failed to initiate payment"
+      });
     }
   });
 
   app.get("/api/payments/status/:checkoutRequestID", async (req, res) => {
-    if (!req.isAuthenticated()) {
-      return res.status(401).json({ message: "Not authenticated" });
-    }
-
     try {
       const { checkoutRequestID } = req.params;
-      const result = await mpesaService.checkPaymentStatus(checkoutRequestID);
       
-      res.json(result);
+      // First, check if we have a booking with this checkout request ID
+      const bookings = await storage.getBookings();
+      const booking = bookings.find((b: any) => b.paymentReference === checkoutRequestID);
+      
+      if (booking && booking.paymentStatus === 'completed') {
+        // Payment was already completed via webhook
+        return res.json({
+          success: true,
+          status: 'completed',
+          transactionId: booking.paymentReference,
+          amount: booking.totalPrice,
+          phoneNumber: booking.buyerPhone
+        });
+      }
+      
+      // If booking exists but payment is still pending, return pending status
+      if (booking && booking.paymentStatus === 'pending') {
+        return res.json({
+          success: true,
+          status: 'pending',
+          message: 'Payment is being processed. Please check your email for confirmation.'
+        });
+      }
+      
+      // If not found in database, try M-Pesa API (but be careful with rate limiting)
+      try {
+        const result = await mpesaService.checkPaymentStatus(checkoutRequestID);
+        res.json(result);
+      } catch (mpesaError) {
+        // If M-Pesa API fails due to rate limiting, return pending status
+        console.log('M-Pesa API rate limited, returning pending status');
+        res.json({
+          success: true,
+          status: 'pending',
+          message: 'Payment is being processed. Please check your email for confirmation.'
+        });
+      }
     } catch (error) {
       console.error('Payment status check failed:', error);
       res.status(500).json({ message: "Failed to check payment status" });
@@ -430,23 +480,17 @@ export async function registerRoutes(app: Express): Promise<Server> {
     }
   });
 
-  app.post("/api/payments/mpesa/callback", async (req, res) => {
+    app.post("/api/payments/mpesa/callback", async (req, res) => {
     try {
       const result = mpesaService.processWebhook(req.body);
-      
+
       if (result.success) {
-        // Payment successful - update booking status
-        console.log('Payment successful:', {
-          checkoutRequestID: result.checkoutRequestID,
-          transactionId: result.transactionId,
-          amount: result.amount,
-          phoneNumber: result.phoneNumber
-        });
-        
         // Extract booking ID from reference (format: BOOKING-{id})
         const reference = req.body.Body?.stkCallback?.CallbackMetadata?.Item?.find((i: any) => i.Name === 'AccountReference')?.Value;
+
         if (reference && reference.startsWith('BOOKING-')) {
           const bookingId = parseInt(reference.replace('BOOKING-', ''));
+          console.log(`Processing payment for booking ${bookingId}`);
           
           try {
             await commissionService.processPaymentCompletion(
@@ -535,70 +579,95 @@ export async function registerRoutes(app: Express): Promise<Server> {
                 ticketNumber: i,
                 qrCode: qrCode,
                 isScanned: false,
+                scannedAt: null,
+                scannedBy: null,
                 attendanceStatus: 'not_attended'
               });
               tickets.push(ticket);
             }
             
-            // Send payment confirmation email with all QR codes
+            // Send payment confirmation email with PDF receipt
             const event = await storage.getEvent(bookingData.eventId);
             
             if (bookingData && event) {
-              // Generate QR code images for all tickets
-              const qrCodeImages = await Promise.all(
-                tickets.map(async (ticket) => {
-                  const image = await generateQRCodeDataURL(ticket.qrCode);
-                  return { ticket, image };
-                })
-              );
-              
-              const qrCodesHtml = qrCodeImages.map(({ ticket, image }) => `
-                <div style="margin: 20px 0; padding: 15px; border: 2px solid #ddd; border-radius: 8px;">
-                  <h4>Ticket ${ticket.ticketNumber}</h4>
-                  ${image ? `<img src="${image}" alt="QR Code for Ticket ${ticket.ticketNumber}" style="border: 2px solid #000; padding: 10px; margin: 10px 0;" />` : ''}
-                  <p><strong>QR Code:</strong> ${ticket.qrCode}</p>
-                </div>
-              `).join('');
-              
-              await sendEmail(
-                bookingData.buyerEmail,
-                `Payment Confirmed - ${event.title}`,
-                `
-                  <h2>Payment Confirmed!</h2>
-                  <p>Dear ${bookingData.buyerName},</p>
-                  <p>Your payment of KES ${bookingData.totalPrice} has been successfully processed.</p>
-                  <h3>Booking Details:</h3>
-                  <ul>
-                    <li><strong>Event:</strong> ${event.title}</li>
-                    <li><strong>Date:</strong> ${new Date(event.date).toLocaleString()}</li>
-                    <li><strong>Venue:</strong> ${event.venue}, ${event.location}</li>
-                    <li><strong>Tickets:</strong> ${bookingData.ticketQuantity}</li>
-                    <li><strong>Total Paid:</strong> KES ${bookingData.totalPrice}</li>
-                    <li><strong>Transaction ID:</strong> ${result.transactionId}</li>
-                    <li><strong>Booking Reference:</strong> ${bookingData.id}</li>
-                  </ul>
-                  <h3>Your QR Codes:</h3>
-                  ${qrCodesHtml}
-                  <p><strong>Important:</strong> Each ticket has a unique QR code. Please save this email and show the appropriate QR code at the entrance for each person attending. Each QR code can only be used once.</p>
-                  <p>Enjoy the event!</p>
-                  <hr />
-                  <small>This is an automated email from EventMasterPro.</small>
-                `
-              );
+              try {
+                // Generate PDF receipt with all ticket details and QR codes
+                const pdfReceipt = await pdfService.generateTicketReceipt({
+                  booking: bookingData,
+                  event,
+                  tickets
+                });
+                
+                // Send email with PDF attachment
+                await sendEmail(
+                  bookingData.buyerEmail,
+                  `Payment Confirmed - ${event.title}`,
+                  `
+                    <h2>Payment Confirmed!</h2>
+                    <p>Dear ${bookingData.buyerName},</p>
+                    <p>Your payment of KES ${bookingData.totalPrice} has been successfully processed.</p>
+                    <h3>Booking Details:</h3>
+                    <ul>
+                      <li><strong>Event:</strong> ${event.title}</li>
+                      <li><strong>Date:</strong> ${new Date(event.date).toLocaleString()}</li>
+                      <li><strong>Venue:</strong> ${event.venue}, ${event.location}</li>
+                      <li><strong>Tickets:</strong> ${bookingData.ticketQuantity}</li>
+                      <li><strong>Total Paid:</strong> KES ${bookingData.totalPrice}</li>
+                      <li><strong>Transaction ID:</strong> ${result.transactionId}</li>
+                      <li><strong>Booking Reference:</strong> ${bookingData.id}</li>
+                    </ul>
+                    <p><strong>📎 Your ticket receipt is attached to this email.</strong></p>
+                    <p><strong>Important:</strong> Each ticket has a unique QR code. Please save the attached PDF and show the appropriate QR code at the entrance for each person attending. Each QR code can only be used once.</p>
+                    <p>Enjoy the event!</p>
+                    <hr />
+                    <small>This is an automated email from EventMasterPro.</small>
+                  `,
+                  [{
+                    filename: `ticket-receipt-${event.title.replace(/[^a-zA-Z0-9]/g, '-')}-${bookingData.id}.pdf`,
+                    content: pdfReceipt,
+                    contentType: 'application/pdf'
+                  }]
+                );
+                
+                console.log(`✅ PDF receipt sent for booking ${bookingId}`);
+              } catch (pdfError) {
+                console.error(`❌ PDF generation failed for booking ${bookingId}:`, pdfError instanceof Error ? pdfError.message : String(pdfError));
+                
+                // Fallback to simple email without PDF
+                await sendEmail(
+                  bookingData.buyerEmail,
+                  `Payment Confirmed - ${event.title}`,
+                  `
+                    <h2>Payment Confirmed!</h2>
+                    <p>Dear ${bookingData.buyerName},</p>
+                    <p>Your payment of KES ${bookingData.totalPrice} has been successfully processed.</p>
+                    <h3>Booking Details:</h3>
+                    <ul>
+                      <li><strong>Event:</strong> ${event.title}</li>
+                      <li><strong>Date:</strong> ${new Date(event.date).toLocaleString()}</li>
+                      <li><strong>Venue:</strong> ${event.venue}, ${event.location}</li>
+                      <li><strong>Tickets:</strong> ${bookingData.ticketQuantity}</li>
+                      <li><strong>Total Paid:</strong> KES ${bookingData.totalPrice}</li>
+                      <li><strong>Transaction ID:</strong> ${result.transactionId}</li>
+                      <li><strong>Booking Reference:</strong> ${bookingData.id}</li>
+                    </ul>
+                    <p><strong>Important:</strong> Your tickets have been generated. Please check your email for the receipt or contact support.</p>
+                    <p>Enjoy the event!</p>
+                    <hr />
+                    <small>This is an automated email from EventMasterPro.</small>
+                  `
+                );
+              }
             }
             
-            console.log(`Booking ${bookingId} payment completed successfully`);
+            console.log(`Booking ${bookingId} completed`);
           } catch (error) {
             console.error(`Failed to update booking ${bookingId}:`, error);
           }
         }
       } else {
         // Payment failed - update booking status
-        console.log('Payment failed:', {
-          checkoutRequestID: result.checkoutRequestID,
-          resultCode: result.resultCode,
-          resultDesc: result.resultDesc
-        });
+        console.log('Payment failed:', result.resultDesc);
         
         // Extract booking ID and update status to failed
         const reference = req.body.Body?.stkCallback?.CallbackMetadata?.Item?.find((i: any) => i.Name === 'AccountReference')?.Value;

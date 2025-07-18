@@ -86,22 +86,31 @@ class PaymentService {
   }
 
   // Poll payment status until completed or failed
-  async pollPaymentStatus(checkoutRequestID: string, maxAttempts = 30): Promise<PaymentStatusResponse> {
+  async pollPaymentStatus(checkoutRequestID: string, maxAttempts = 8): Promise<PaymentStatusResponse> {
     for (let attempt = 0; attempt < maxAttempts; attempt++) {
-      const status = await this.checkPaymentStatus(checkoutRequestID);
-      
-      if (status.status === 'completed' || status.status === 'failed') {
-        return status;
+      try {
+        const status = await this.checkPaymentStatus(checkoutRequestID);
+        
+        if (status.status === 'completed' || status.status === 'failed') {
+          return status;
+        }
+        
+        // Wait much longer between attempts to avoid rate limiting
+        // Start with 5 seconds, then increase to 10 seconds
+        const waitTime = attempt < 2 ? 5000 : 10000;
+        await new Promise(resolve => setTimeout(resolve, waitTime));
+      } catch (error) {
+        console.log(`Poll attempt ${attempt + 1} failed, retrying...`);
+        // Wait even longer on error
+        await new Promise(resolve => setTimeout(resolve, 15000));
       }
-      
-      // Wait 2 seconds before next attempt
-      await new Promise(resolve => setTimeout(resolve, 2000));
     }
     
+    // Instead of failing, return pending status and let webhook handle it
     return {
-      success: false,
-      status: 'failed',
-      errorMessage: 'Payment status check timed out'
+      success: true,
+      status: 'pending',
+      errorMessage: 'Payment initiated successfully. Please check your email for confirmation once payment is processed.'
     };
   }
 }
