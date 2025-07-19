@@ -273,8 +273,8 @@ export default function AdminPage() {
       availableSeats: parseInt(values.availableSeats),
       categoryId: parseInt(values.categoryId),
       createdBy: user.id,
-      date: new Date(values.date).toISOString(),
-      endDate: values.endDate ? new Date(values.endDate).toISOString() : undefined,
+      date: new Date(values.date),
+      endDate: values.endDate ? new Date(values.endDate) : undefined,
       isFeatured: values.isFeatured
     };
 
@@ -374,85 +374,7 @@ export default function AdminPage() {
 
   return (
     <div className="min-h-screen flex bg-slate-50">
-      {/* Mobile Sidebar Drawer */}
-      <Sheet open={mobileNavOpen} onOpenChange={setMobileNavOpen}>
-        <SheetTrigger asChild>
-          <button className="md:hidden p-3 focus:outline-none" onClick={() => setMobileNavOpen(true)}>
-            <MenuIcon className="h-7 w-7 text-slate-800" />
-            <span className="sr-only">Open admin navigation</span>
-          </button>
-        </SheetTrigger>
-        <SheetContent side="left" className="w-64 p-0">
-          <div className="bg-slate-800 text-white h-full flex flex-col">
-            <div className="p-4 flex items-center border-b border-slate-700">
-              <Link href="/" onClick={() => setMobileNavOpen(false)}>
-                <span className="text-xl font-bold cursor-pointer">StarEvents</span>
-              </Link>
-              <span className="ml-2 bg-primary text-white text-xs rounded px-2 py-1">Admin</span>
-            </div>
-            <div className="flex-1 py-8 px-4">
-              <nav className="space-y-2">
-                <button 
-                  className={`w-full flex items-center text-left py-2 px-4 rounded ${activeTab === "dashboard" ? "bg-slate-700" : "hover:bg-slate-700"}`}
-                  onClick={() => { setActiveTab("dashboard"); setMobileNavOpen(false); }}
-                >
-                  <HomeIcon className="h-5 w-5 mr-3" />
-                  Dashboard
-                </button>
-                <button 
-                  className={`w-full flex items-center text-left py-2 px-4 rounded ${activeTab === "events" ? "bg-slate-700" : "hover:bg-slate-700"}`}
-                  onClick={() => { setActiveTab("events"); setMobileNavOpen(false); }}
-                >
-                  <Calendar className="h-5 w-5 mr-3" />
-                  Events
-                </button>
-                <button 
-                  className={`w-full flex items-center text-left py-2 px-4 rounded ${activeTab === "bookings" ? "bg-slate-700" : "hover:bg-slate-700"}`}
-                  onClick={() => { setActiveTab("bookings"); setMobileNavOpen(false); }}
-                >
-                  <TicketIcon className="h-5 w-5 mr-3" />
-                  Bookings
-                </button>
-                <button 
-                  className={`w-full flex items-center text-left py-2 px-4 rounded ${activeTab === "users" ? "bg-slate-700" : "hover:bg-slate-700"}`}
-                  onClick={() => { setActiveTab("users"); setMobileNavOpen(false); }}
-                >
-                  <Users className="h-5 w-5 mr-3" />
-                  Users
-                </button>
-                {isMobile && (
-                  <button 
-                    className={`w-full flex items-center text-left py-2 px-4 rounded ${activeTab === "qr-scanner" ? "bg-slate-700" : "hover:bg-slate-700"}`}
-                    onClick={() => { setActiveTab("qr-scanner"); setMobileNavOpen(false); }}
-                  >
-                    <CameraIcon className="h-5 w-5 mr-3" />
-                    QR Scanner
-                  </button>
-                )}
-              </nav>
-            </div>
-            <div className="p-4 border-t border-slate-700">
-              <div className="flex items-center">
-                <img 
-                  className="h-8 w-8 rounded-full"
-                  src={`https://ui-avatars.com/api/?name=${encodeURIComponent(user?.fullName || '')}&background=random`}
-                  alt={user?.fullName}
-                />
-                <div className="ml-3 flex-1">
-                  <p className="text-sm font-medium truncate">{user?.fullName}</p>
-                  <p className="text-xs text-slate-400 truncate">{user?.email}</p>
-                </div>
-                <button 
-                  className="text-slate-400 hover:text-white"
-                  onClick={() => { setMobileNavOpen(false); logoutMutation.mutate(); }}
-                >
-                  <LogOut className="h-5 w-5" />
-                </button>
-              </div>
-            </div>
-          </div>
-        </SheetContent>
-      </Sheet>
+      
       {/* Desktop Sidebar */}
       <div className="hidden md:flex w-64 bg-slate-800 text-white flex-col">
         <div className="p-4 flex items-center border-b border-slate-700">
@@ -524,7 +446,7 @@ export default function AdminPage() {
       </div>
       {/* Main Content */}
       <div className="flex-1 overflow-auto w-full">
-        <header className="bg-white shadow flex items-center px-2 sm:px-6">
+        <header className="bg-white shadow flex items-center justify-between px-2 sm:px-6">
           <div className="flex-1 py-4">
             <h1 className="text-xl sm:text-2xl font-bold text-slate-900">
               {activeTab === "dashboard" && "Admin Dashboard"}
@@ -534,6 +456,230 @@ export default function AdminPage() {
               {activeTab === "qr-scanner" && "QR Code Scanner"}
             </h1>
           </div>
+          {/* Mobile Menu Button - Top Right */}
+          <Sheet open={mobileNavOpen} onOpenChange={setMobileNavOpen}>
+            <SheetTrigger asChild>
+              <button className="md:hidden p-3 focus:outline-none hover:bg-slate-100 rounded-xl transition-all duration-200 hover:shadow-md group" onClick={() => setMobileNavOpen(true)}>
+                <div className="relative">
+                  <MenuIcon className="h-6 w-6 text-slate-700 group-hover:text-primary transition-colors duration-200" />
+                  <div className="absolute -top-1 -right-1 w-2 h-2 bg-primary rounded-full opacity-0 group-hover:opacity-100 transition-opacity duration-200"></div>
+                </div>
+                <span className="sr-only">Open admin navigation</span>
+              </button>
+            </SheetTrigger>
+            <SheetContent side="left" className="w-80 p-0 bg-gradient-to-br from-slate-900 via-slate-800 to-slate-900">
+              <div className="h-full flex flex-col relative overflow-hidden">
+                {/* Background Pattern */}
+                <div className="absolute inset-0 opacity-5">
+                  <div className="absolute inset-0 bg-[radial-gradient(circle_at_1px_1px,rgba(255,255,255,0.15)_1px,transparent_0)] bg-[length:20px_20px]"></div>
+                </div>
+                
+                {/* Header Section */}
+                <div className="relative p-6 border-b border-slate-700/50 bg-gradient-to-r from-slate-800/50 to-slate-700/50 backdrop-blur-sm">
+                  <div className="flex items-center justify-between">
+                    <Link href="/" onClick={() => setMobileNavOpen(false)} className="group">
+                      <div className="flex items-center space-x-3">
+                        <div className="w-10 h-10 bg-gradient-to-br from-primary to-primary/70 rounded-xl flex items-center justify-center shadow-lg group-hover:shadow-xl transition-all duration-300 group-hover:scale-105">
+                          <span className="text-white font-bold text-lg">S</span>
+                        </div>
+                        <div>
+                          <span className="text-xl font-bold text-white group-hover:text-primary transition-colors duration-300">StarEvents</span>
+                          <div className="flex items-center mt-1">
+                            <span className="bg-gradient-to-r from-primary to-primary/70 text-white text-xs rounded-full px-3 py-1 font-medium shadow-sm">Admin Panel</span>
+                          </div>
+                        </div>
+                      </div>
+                    </Link>
+                    <button 
+                      onClick={() => setMobileNavOpen(false)}
+                      className="p-2 rounded-lg bg-slate-700/50 hover:bg-slate-600/50 text-slate-300 hover:text-white transition-all duration-200"
+                    >
+                      <XIcon className="h-5 w-5" />
+                    </button>
+                  </div>
+                </div>
+
+                {/* Navigation Section */}
+                <div className="flex-1 py-6 px-4 relative">
+                  <nav className="space-y-3">
+                    <div className="mb-6">
+                      <h3 className="text-xs font-semibold text-slate-400 uppercase tracking-wider mb-4 px-2">Navigation</h3>
+                    </div>
+                    
+                    <button 
+                      className={`w-full group relative overflow-hidden rounded-xl p-4 transition-all duration-300 ${
+                        activeTab === "dashboard" 
+                          ? "bg-gradient-to-r from-primary to-primary/80 text-white shadow-lg shadow-primary/25" 
+                          : "bg-slate-800/50 hover:bg-slate-700/50 text-slate-300 hover:text-white border border-slate-700/50 hover:border-slate-600/50"
+                      }`}
+                      onClick={() => { setActiveTab("dashboard"); setMobileNavOpen(false); }}
+                    >
+                      <div className="flex items-center">
+                        <div className={`p-2 rounded-lg transition-all duration-300 ${
+                          activeTab === "dashboard" 
+                            ? "bg-white/20 text-white" 
+                            : "bg-slate-700/50 text-slate-400 group-hover:bg-slate-600/50 group-hover:text-white"
+                        }`}>
+                          <HomeIcon className="h-5 w-5" />
+                        </div>
+                        <div className="ml-4">
+                          <span className="font-medium">Dashboard</span>
+                          <p className="text-xs opacity-70 mt-0.5">Overview & Analytics</p>
+                        </div>
+                      </div>
+                      {activeTab === "dashboard" && (
+                        <div className="absolute right-2 top-1/2 transform -translate-y-1/2">
+                          <div className="w-2 h-2 bg-white rounded-full"></div>
+                        </div>
+                      )}
+                    </button>
+
+                    <button 
+                      className={`w-full group relative overflow-hidden rounded-xl p-4 transition-all duration-300 ${
+                        activeTab === "events" 
+                          ? "bg-gradient-to-r from-primary to-primary/80 text-white shadow-lg shadow-primary/25" 
+                          : "bg-slate-800/50 hover:bg-slate-700/50 text-slate-300 hover:text-white border border-slate-700/50 hover:border-slate-600/50"
+                      }`}
+                      onClick={() => { setActiveTab("events"); setMobileNavOpen(false); }}
+                    >
+                      <div className="flex items-center">
+                        <div className={`p-2 rounded-lg transition-all duration-300 ${
+                          activeTab === "events" 
+                            ? "bg-white/20 text-white" 
+                            : "bg-slate-700/50 text-slate-400 group-hover:bg-slate-600/50 group-hover:text-white"
+                        }`}>
+                          <Calendar className="h-5 w-5" />
+                        </div>
+                        <div className="ml-4">
+                          <span className="font-medium">Events</span>
+                          <p className="text-xs opacity-70 mt-0.5">Manage & Create Events</p>
+                        </div>
+                      </div>
+                      {activeTab === "events" && (
+                        <div className="absolute right-2 top-1/2 transform -translate-y-1/2">
+                          <div className="w-2 h-2 bg-white rounded-full"></div>
+                        </div>
+                      )}
+                    </button>
+
+                    <button 
+                      className={`w-full group relative overflow-hidden rounded-xl p-4 transition-all duration-300 ${
+                        activeTab === "bookings" 
+                          ? "bg-gradient-to-r from-primary to-primary/80 text-white shadow-lg shadow-primary/25" 
+                          : "bg-slate-800/50 hover:bg-slate-700/50 text-slate-300 hover:text-white border border-slate-700/50 hover:border-slate-600/50"
+                      }`}
+                      onClick={() => { setActiveTab("bookings"); setMobileNavOpen(false); }}
+                    >
+                      <div className="flex items-center">
+                        <div className={`p-2 rounded-lg transition-all duration-300 ${
+                          activeTab === "bookings" 
+                            ? "bg-white/20 text-white" 
+                            : "bg-slate-700/50 text-slate-400 group-hover:bg-slate-600/50 group-hover:text-white"
+                        }`}>
+                          <TicketIcon className="h-5 w-5" />
+                        </div>
+                        <div className="ml-4">
+                          <span className="font-medium">Bookings</span>
+                          <p className="text-xs opacity-70 mt-0.5">Ticket Sales & Attendance</p>
+                        </div>
+                      </div>
+                      {activeTab === "bookings" && (
+                        <div className="absolute right-2 top-1/2 transform -translate-y-1/2">
+                          <div className="w-2 h-2 bg-white rounded-full"></div>
+                        </div>
+                      )}
+                    </button>
+
+                    <button 
+                      className={`w-full group relative overflow-hidden rounded-xl p-4 transition-all duration-300 ${
+                        activeTab === "users" 
+                          ? "bg-gradient-to-r from-primary to-primary/80 text-white shadow-lg shadow-primary/25" 
+                          : "bg-slate-800/50 hover:bg-slate-700/50 text-slate-300 hover:text-white border border-slate-700/50 hover:border-slate-600/50"
+                      }`}
+                      onClick={() => { setActiveTab("users"); setMobileNavOpen(false); }}
+                    >
+                      <div className="flex items-center">
+                        <div className={`p-2 rounded-lg transition-all duration-300 ${
+                          activeTab === "users" 
+                            ? "bg-white/20 text-white" 
+                            : "bg-slate-700/50 text-slate-400 group-hover:bg-slate-600/50 group-hover:text-white"
+                        }`}>
+                          <Users className="h-5 w-5" />
+                        </div>
+                        <div className="ml-4">
+                          <span className="font-medium">Users</span>
+                          <p className="text-xs opacity-70 mt-0.5">User Management</p>
+                        </div>
+                      </div>
+                      {activeTab === "users" && (
+                        <div className="absolute right-2 top-1/2 transform -translate-y-1/2">
+                          <div className="w-2 h-2 bg-white rounded-full"></div>
+                        </div>
+                      )}
+                    </button>
+
+                    {isMobile && (
+                      <button 
+                        className={`w-full group relative overflow-hidden rounded-xl p-4 transition-all duration-300 ${
+                          activeTab === "qr-scanner" 
+                            ? "bg-gradient-to-r from-green-500 to-green-600 text-white shadow-lg shadow-green-500/25" 
+                            : "bg-slate-800/50 hover:bg-slate-700/50 text-slate-300 hover:text-white border border-slate-700/50 hover:border-slate-600/50"
+                        }`}
+                        onClick={() => { setActiveTab("qr-scanner"); setMobileNavOpen(false); }}
+                      >
+                        <div className="flex items-center">
+                          <div className={`p-2 rounded-lg transition-all duration-300 ${
+                            activeTab === "qr-scanner" 
+                              ? "bg-white/20 text-white" 
+                              : "bg-slate-700/50 text-slate-400 group-hover:bg-slate-600/50 group-hover:text-white"
+                          }`}>
+                            <CameraIcon className="h-5 w-5" />
+                          </div>
+                          <div className="ml-4">
+                            <span className="font-medium">QR Scanner</span>
+                            <p className="text-xs opacity-70 mt-0.5">Scan Tickets</p>
+                          </div>
+                        </div>
+                        {activeTab === "qr-scanner" && (
+                          <div className="absolute right-2 top-1/2 transform -translate-y-1/2">
+                            <div className="w-2 h-2 bg-white rounded-full"></div>
+                          </div>
+                        )}
+                      </button>
+                    )}
+                  </nav>
+                </div>
+
+                {/* User Profile Section */}
+                <div className="relative p-6 border-t border-slate-700/50 bg-gradient-to-r from-slate-800/50 to-slate-700/50 backdrop-blur-sm">
+                  <div className="flex items-center">
+                    <div className="relative">
+                      <img 
+                        className="h-12 w-12 rounded-xl border-2 border-slate-600/50 shadow-lg"
+                        src={`https://ui-avatars.com/api/?name=${encodeURIComponent(user?.fullName || '')}&background=random&size=128`}
+                        alt={user?.fullName}
+                      />
+                      <div className="absolute -bottom-1 -right-1 w-4 h-4 bg-green-500 rounded-full border-2 border-slate-800"></div>
+                    </div>
+                    <div className="ml-4 flex-1">
+                      <p className="text-sm font-semibold text-white truncate">{user?.fullName}</p>
+                      <p className="text-xs text-slate-400 truncate">{user?.email}</p>
+                      <div className="flex items-center mt-1">
+                        <div className="w-2 h-2 bg-green-500 rounded-full mr-2"></div>
+                        <span className="text-xs text-slate-400">Online</span>
+                      </div>
+                    </div>
+                    <button 
+                      className="p-2 rounded-lg bg-slate-700/50 hover:bg-red-500/20 text-slate-300 hover:text-red-400 transition-all duration-200 group"
+                      onClick={() => { setMobileNavOpen(false); logoutMutation.mutate(); }}
+                    >
+                      <LogOut className="h-5 w-5 group-hover:scale-110 transition-transform duration-200" />
+                    </button>
+                  </div>
+                </div>
+              </div>
+            </SheetContent>
+          </Sheet>
         </header>
         <main className="p-2 sm:p-6">
           <Tabs value={activeTab} onValueChange={setActiveTab}>
@@ -1315,8 +1461,8 @@ export default function AdminPage() {
                         availableSeats: parseInt(values.availableSeats),
                         categoryId: parseInt(values.categoryId),
                         createdBy: editEvent.createdBy,
-                        date: new Date(values.date).toISOString(),
-                        endDate: values.endDate ? new Date(values.endDate).toISOString() : undefined,
+                        date: new Date(values.date),
+                        endDate: values.endDate ? new Date(values.endDate) : undefined,
                         isFeatured: values.isFeatured,
                         imageUrl: values.imageUrl,
                         description: values.description,
