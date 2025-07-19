@@ -270,7 +270,7 @@ export default function CheckoutPage() {
             <div className="flex justify-between h-16 sm:h-20 items-center">
               <div className="flex items-center gap-4 sm:gap-8">
                 <Link href="/">
-                  <span className="text-primary text-2xl sm:text-3xl font-extrabold tracking-tight cursor-pointer drop-shadow-sm">EventHub</span>
+                  <span className="text-primary text-2xl sm:text-3xl font-extrabold tracking-tight cursor-pointer drop-shadow-sm">StarEvents</span>
                 </Link>
                 <nav className="hidden sm:flex sm:space-x-4 items-center">
                   <Link href="/events">
@@ -328,50 +328,51 @@ export default function CheckoutPage() {
         {/* Footer */}
         <footer className="bg-slate-800 text-white">
           <div className="max-w-7xl mx-auto py-12 px-4 sm:px-6 lg:px-8">
-            <div className="grid grid-cols-1 md:grid-cols-4 gap-8">
+            <div className="md:grid md:grid-cols-4 md:gap-8">
               <div>
-                <h3 className="text-2xl font-bold">EventHub</h3>
+                <h3 className="text-2xl font-bold">StarEvents</h3>
                 <p className="mt-4 text-slate-300">
                   The easiest way to discover and book tickets for your favorite events.
                 </p>
               </div>
               <div>
-                <h3 className="text-lg font-semibold mb-4">Help</h3>
+                <h3 className="text-lg font-semibold mb-4 mt-8 md:mt-0">Categories</h3>
                 <ul className="space-y-2">
-                  <li><a href="#" className="text-slate-300 hover:text-white">FAQs</a></li>
-                  <li><a href="#" className="text-slate-300 hover:text-white">Contact Us</a></li>
-                  <li><a href="#" className="text-slate-300 hover:text-white">Ticket Info</a></li>
-                  <li><a href="#" className="text-slate-300 hover:text-white">Refunds</a></li>
+                  <li><a href="#" className="text-slate-300 hover:text-white">All Events</a></li>
+                  <li><a href="#" className="text-slate-300 hover:text-white">Featured</a></li>
+                  <li><a href="#" className="text-slate-300 hover:text-white">Upcoming</a></li>
                 </ul>
               </div>
               <div>
-                <h3 className="text-lg font-semibold mb-4">Legal</h3>
+                <h3 className="text-lg font-semibold mb-4 mt-8 md:mt-0">Links</h3>
                 <ul className="space-y-2">
-                  <li><a href="#" className="text-slate-300 hover:text-white">Terms of Service</a></li>
-                  <li><a href="#" className="text-slate-300 hover:text-white">Privacy Policy</a></li>
+                  <li><Link href="/"><a className="text-slate-300 hover:text-white">Home</a></Link></li>
+                  <li><Link href="/events"><a className="text-slate-300 hover:text-white">Events</a></Link></li>
+                  <li><Link href="/calendar"><a className="text-slate-300 hover:text-white">Calendar</a></Link></li>
+                  {user && <li><Link href="/dashboard"><a className="text-slate-300 hover:text-white">My Dashboard</a></Link></li>}
                 </ul>
               </div>
               <div>
-                <h3 className="text-lg font-semibold mb-4">Subscribe</h3>
-                <p className="text-slate-300 mb-4">
-                  Get updates on new events and exclusive offers.
-                </p>
-                <form className="mt-2">
-                  <div className="flex">
-                    <input id="email-address" name="email" type="email" autoComplete="email" required className="min-w-0 w-full bg-white border border-transparent rounded-md py-2 px-4 text-base text-slate-900 placeholder-slate-500 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-offset-slate-800 focus:ring-white focus:border-white" placeholder="Enter your email" />
-                    <div className="ml-3 flex-shrink-0">
-                      <button type="submit" className="w-full bg-primary border border-transparent rounded-md py-2 px-4 flex items-center justify-center text-base font-medium text-white hover:bg-primary/90 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-offset-slate-800 focus:ring-primary">
-                        Subscribe
-                      </button>
-                    </div>
-                  </div>
-                </form>
+                <h3 className="text-lg font-semibold mb-4 mt-8 md:mt-0">Contact</h3>
+                <ul className="space-y-2">
+                  <li><a href="mailto:support@starevents.com" className="text-slate-300 hover:text-white transition-colors">support@starevents.com</a></li>
+                  <li><a href="tel:+254741991213" className="text-slate-300 hover:text-white transition-colors">+254 741 991 213</a></li>
+                </ul>
               </div>
             </div>
             <div className="mt-12 pt-8 border-t border-slate-700">
-              <p className="text-slate-400 text-center">
-                &copy; 2023 EventHub, Inc. All rights reserved.
-              </p>
+              <div className="flex items-center justify-center gap-3">
+                <img 
+                  src="/workingwavewhitelogo.jpg" 
+                  alt="Working Wave Logo" 
+                  className="h-6 w-auto opacity-80 hover:opacity-100 transition-opacity"
+                />
+                <p className="text-slate-400 text-center">
+                  <a href="https://working-wave.vercel.app/" target="_blank" rel="noopener noreferrer" className="hover:text-white transition-colors">
+                    Working Wave © 2025. All Right Reserved.
+                  </a>
+                </p>
+              </div>
             </div>
           </div>
         </footer>
@@ -387,7 +388,7 @@ export default function CheckoutPage() {
           <div className="flex justify-between h-16 sm:h-20 items-center">
             <div className="flex items-center gap-4 sm:gap-8">
               <Link href="/">
-                <span className="text-primary text-2xl sm:text-3xl font-extrabold tracking-tight cursor-pointer drop-shadow-sm">EventHub</span>
+                <span className="text-primary text-2xl sm:text-3xl font-extrabold tracking-tight cursor-pointer drop-shadow-sm">StarEvents</span>
               </Link>
               <nav className="hidden sm:flex sm:space-x-4 items-center">
                 <Link href="/events">
@@ -679,7 +680,7 @@ export default function CheckoutPage() {
         <div className="max-w-7xl mx-auto py-12 px-4 sm:px-6 lg:px-8">
           <div className="grid grid-cols-1 md:grid-cols-4 gap-8">
             <div>
-              <h3 className="text-2xl font-bold">EventHub</h3>
+                              <h3 className="text-2xl font-bold">StarEvents</h3>
               <p className="mt-4 text-slate-300">
                 The easiest way to discover and book tickets for your favorite events.
               </p>
@@ -717,11 +718,20 @@ export default function CheckoutPage() {
               </form>
             </div>
           </div>
-          <div className="mt-12 pt-8 border-t border-slate-700">
-            <p className="text-slate-400 text-center">
-              &copy; 2023 EventHub, Inc. All rights reserved.
-            </p>
-          </div>
+                      <div className="mt-12 pt-8 border-t border-slate-700">
+              <div className="flex items-center justify-center gap-3">
+                <img 
+                  src="/workingwavewhitelogo.jpg" 
+                  alt="Working Wave Logo" 
+                  className="h-6 w-auto opacity-80 hover:opacity-100 transition-opacity"
+                />
+                <p className="text-slate-400 text-center">
+                  <a href="https://working-wave.vercel.app/" target="_blank" rel="noopener noreferrer" className="hover:text-white transition-colors">
+                    Working Wave © 2025. All Right Reserved.
+                  </a>
+                </p>
+              </div>
+            </div>
         </div>
       </footer>
     </div>

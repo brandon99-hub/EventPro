@@ -101,7 +101,7 @@ export default function AuthPage() {
                 <Sparkles className="h-8 w-8 text-white" />
               </div>
               <h1 className="text-3xl sm:text-4xl font-bold text-primary">
-                EventHub
+                StarEvents
               </h1>
             </div>
             <p className="text-slate-600 text-lg">Your gateway to amazing events</p>

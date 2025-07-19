@@ -1042,6 +1042,24 @@ export async function registerRoutes(app: Express): Promise<Server> {
     }
   });
 
+  app.get("/api/bookings/:id/tickets", async (req, res) => {
+    if (!req.isAuthenticated() || !req.user.isAdmin) {
+      return res.status(403).json({ message: "Unauthorized" });
+    }
+    
+    try {
+      const bookingId = parseInt(req.params.id);
+      if (isNaN(bookingId)) {
+        return res.status(400).json({ message: "Invalid booking ID" });
+      }
+      
+      const tickets = await storage.getTicketsByBookingId(bookingId);
+      res.json(tickets);
+    } catch (error) {
+      res.status(500).json({ message: "Failed to fetch tickets" });
+    }
+  });
+
   app.post("/api/bookings", async (req, res) => {
     try {
       const validatedData = insertBookingSchema.parse({
@@ -1136,12 +1154,17 @@ export async function registerRoutes(app: Express): Promise<Server> {
         return res.status(404).json({ message: "Booking or event not found" });
       }
 
-      // Delete the ticket (remove from database as requested)
-      await storage.deleteTicketByQRCode(qrCode);
+      // Mark the ticket as scanned instead of deleting
+      await storage.updateTicket(ticket.id, {
+        isScanned: true,
+        scannedAt: new Date(),
+        scannedBy: req.user.id,
+        attendanceStatus: 'attended'
+      });
 
       res.json({
         success: true,
-        message: "Attendance marked successfully - QR code removed",
+        message: "Attendance marked successfully",
         ticket: {
           id: ticket.id,
           ticketNumber: ticket.ticketNumber,
@@ -1150,7 +1173,8 @@ export async function registerRoutes(app: Express): Promise<Server> {
           eventTitle: event.title,
           eventDate: event.date,
           venue: event.venue,
-          location: event.location
+          location: event.location,
+          bookingId: ticket.bookingId
         }
       });
 

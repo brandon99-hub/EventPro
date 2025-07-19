@@ -49,7 +49,7 @@ export function MobileNav({
           {/* Header */}
           <div className="flex items-center justify-between p-4 border-b">
             <Link href="/" onClick={() => setIsOpen(false)}>
-              <span className="text-primary text-2xl font-bold">EventHub</span>
+                              <span className="text-primary text-2xl font-bold">StarEvents</span>
             </Link>
             <Button variant="ghost" size="icon" onClick={() => setIsOpen(false)}>
               <XIcon className="h-5 w-5" />

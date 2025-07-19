@@ -115,6 +115,7 @@ export default function AdminPage() {
   const [mobileNavOpen, setMobileNavOpen] = useState(false);
   const [isScanning, setIsScanning] = useState(false);
   const [scannedResult, setScannedResult] = useState<string | null>(null);
+  const [ticketDetails, setTicketDetails] = useState<Record<number, any[]>>({});
   const isMobile = useIsMobile();
 
   // Redirect if not an admin
@@ -135,6 +136,37 @@ export default function AdminPage() {
   const { data: bookings = [], isLoading: bookingsLoading } = useQuery<Booking[]>({
     queryKey: ["/api/bookings"],
   });
+
+  // Fetch ticket details for each booking
+  const fetchTicketDetails = async (bookingId: number) => {
+    try {
+      const response = await apiRequest("GET", `/api/bookings/${bookingId}/tickets`);
+      const tickets = await response.json();
+      setTicketDetails(prev => ({
+        ...prev,
+        [bookingId]: tickets
+      }));
+    } catch (error) {
+      console.error('Failed to fetch ticket details:', error);
+    }
+  };
+
+  // Load ticket details for all bookings
+  useEffect(() => {
+    if (bookings.length > 0) {
+      bookings.forEach(booking => {
+        fetchTicketDetails(booking.id);
+      });
+    }
+  }, [bookings]);
+
+  // Update attendance when QR is scanned
+  const updateAttendanceAfterScan = (scannedTicket: any) => {
+    if (scannedTicket.bookingId) {
+      // Refresh ticket details for the specific booking
+      fetchTicketDetails(scannedTicket.bookingId);
+    }
+  };
 
   // Form setup
   const form = useForm<EventFormValues>({
@@ -354,7 +386,7 @@ export default function AdminPage() {
           <div className="bg-slate-800 text-white h-full flex flex-col">
             <div className="p-4 flex items-center border-b border-slate-700">
               <Link href="/" onClick={() => setMobileNavOpen(false)}>
-                <span className="text-xl font-bold cursor-pointer">EventHub</span>
+                <span className="text-xl font-bold cursor-pointer">StarEvents</span>
               </Link>
               <span className="ml-2 bg-primary text-white text-xs rounded px-2 py-1">Admin</span>
             </div>
@@ -425,7 +457,7 @@ export default function AdminPage() {
       <div className="hidden md:flex w-64 bg-slate-800 text-white flex-col">
         <div className="p-4 flex items-center border-b border-slate-700">
           <Link href="/">
-            <span className="text-xl font-bold cursor-pointer">EventHub</span>
+                            <span className="text-xl font-bold cursor-pointer">StarEvents</span>
           </Link>
           <span className="ml-2 bg-primary text-white text-xs rounded px-2 py-1">Admin</span>
         </div>
@@ -558,7 +590,7 @@ export default function AdminPage() {
                       <div className="ml-4">
                         <p className="text-sm font-medium text-slate-500">Revenue</p>
                         <h3 className="text-3xl font-bold">
-                          ${bookings.reduce((sum, booking) => sum + booking.totalPrice, 0).toFixed(2)}
+                          KSH {bookings.reduce((sum, booking) => sum + booking.totalPrice, 0).toFixed(2)}
                         </h3>
                       </div>
                     </div>
@@ -585,7 +617,7 @@ export default function AdminPage() {
                               </p>
                             </div>
                             <div className="text-right">
-                              <p className="font-medium">${booking.totalPrice.toFixed(2)}</p>
+                              <p className="font-medium">KSH {booking.totalPrice.toFixed(2)}</p>
                               <p className="text-sm text-slate-500">
                                 {format(new Date(booking.bookingDate), "MMM d, yyyy")}
                               </p>
@@ -1663,6 +1695,29 @@ export default function AdminPage() {
                   <CardDescription>View all ticket purchases and attendee details.</CardDescription>
                 </CardHeader>
                 <CardContent>
+                  {/* Search Bar */}
+                  <div className="mb-6">
+                    <div className="relative">
+                      <SearchIcon className="absolute left-3 top-1/2 transform -translate-y-1/2 h-4 w-4 text-slate-400" />
+                      <Input
+                        type="text"
+                        placeholder="Search by buyer name or email..."
+                        value={searchQuery}
+                        onChange={(e) => setSearchQuery(e.target.value)}
+                        className="pl-10"
+                      />
+                      {searchQuery && (
+                        <Button
+                          variant="ghost"
+                          size="sm"
+                          onClick={() => setSearchQuery("")}
+                          className="absolute right-2 top-1/2 transform -translate-y-1/2 h-6 w-6 p-0"
+                        >
+                          <XIcon className="h-4 w-4" />
+                        </Button>
+                      )}
+                    </div>
+                  </div>
                   {/* Desktop Table */}
                   <div className="hidden md:block overflow-x-auto">
                     <table className="min-w-full divide-y divide-slate-200">
@@ -1675,63 +1730,99 @@ export default function AdminPage() {
                           <th className="px-4 py-2 text-left text-xs font-medium text-slate-500 uppercase">Tickets</th>
                           <th className="px-4 py-2 text-left text-xs font-medium text-slate-500 uppercase">Total Price</th>
                           <th className="px-4 py-2 text-left text-xs font-medium text-slate-500 uppercase">Payment Status</th>
-                          <th className="px-4 py-2 text-left text-xs font-medium text-slate-500 uppercase">Attendance</th>
-                          <th className="px-4 py-2 text-left text-xs font-medium text-slate-500 uppercase">QR Code</th>
+                          <th className="px-4 py-2 text-left text-xs font-medium text-slate-500 uppercase">Attendance Status</th>
                           <th className="px-4 py-2 text-left text-xs font-medium text-slate-500 uppercase">Booking Date</th>
                         </tr>
                       </thead>
                       <tbody className="bg-white divide-y divide-slate-100">
-                  {bookings.length === 0 ? (
-                          <tr>
-                            <td colSpan={10} className="text-center py-8 text-slate-400">No bookings found.</td>
-                          </tr>
-                  ) : (
-                          bookings.map(booking => {
-                        const event = events.find(e => e.id === booking.eventId);
-                        return (
+                        {(() => {
+                          // Filter bookings based on search query
+                          const filteredBookings = bookings.filter(booking =>
+                            booking.buyerName.toLowerCase().includes(searchQuery.toLowerCase()) ||
+                            booking.buyerEmail.toLowerCase().includes(searchQuery.toLowerCase())
+                          );
+
+                          if (filteredBookings.length === 0) {
+                            return (
+                              <tr>
+                                <td colSpan={9} className="text-center py-8 text-slate-400">
+                                  {searchQuery ? 'No bookings found matching your search.' : 'No bookings found.'}
+                                </td>
+                              </tr>
+                            );
+                          }
+
+                          return filteredBookings.map(booking => {
+                            const event = events.find(e => e.id === booking.eventId);
+                            const tickets = ticketDetails[booking.id] || [];
+                            const scannedTickets = tickets.filter(ticket => ticket.isScanned);
+                            const allScanned = tickets.length > 0 && scannedTickets.length === tickets.length;
+                            const partialScanned = scannedTickets.length > 0 && scannedTickets.length < tickets.length;
+
+                            return (
                               <tr key={booking.id}>
                                 <td className="px-4 py-2 text-sm text-slate-700">{booking.id}</td>
                                 <td className="px-4 py-2 text-sm text-slate-700">{event ? event.title : 'Event not found'}</td>
                                 <td className="px-4 py-2 text-sm text-slate-700">{booking.buyerName}</td>
                                 <td className="px-4 py-2 text-sm text-slate-700">{booking.buyerEmail}</td>
                                 <td className="px-4 py-2 text-sm text-slate-700">{booking.ticketQuantity}</td>
-                                <td className="px-4 py-2 text-sm text-slate-700">${booking.totalPrice.toFixed(2)}</td>
+                                <td className="px-4 py-2 text-sm text-slate-700">KSH {booking.totalPrice.toFixed(2)}</td>
                                 <td className="px-4 py-2 text-sm text-slate-700">
                                   <Badge variant={booking.paymentStatus === 'completed' ? 'default' : 'secondary'}>
                                     {booking.paymentStatus}
                                   </Badge>
                                 </td>
                                 <td className="px-4 py-2 text-sm text-slate-700">
-                                  <Badge variant={booking.paymentStatus === 'completed' ? 'default' : 'secondary'}>
-                                    {booking.paymentStatus}
-                                  </Badge>
-                                </td>
-                                <td className="px-4 py-2 text-sm text-slate-700">
-                                  <span className="text-slate-400">See Tickets</span>
+                                  <div className="flex items-center gap-2">
+                                    <Checkbox 
+                                      checked={scannedTickets.length > 0}
+                                      disabled={tickets.length === 0}
+                                      className="data-[state=checked]:bg-green-600 data-[state=checked]:border-green-600"
+                                    />
+                                    <span className="text-xs text-slate-500">
+                                      {tickets.length > 0 ? `${scannedTickets.length}/${tickets.length}` : 'No tickets'}
+                                    </span>
+                                  </div>
                                 </td>
                                 <td className="px-4 py-2 text-sm text-slate-700">{format(new Date(booking.bookingDate), 'yyyy-MM-dd HH:mm')}</td>
                               </tr>
-                        );
-                          })
-                        )}
+                            );
+                          });
+                        })()}
                       </tbody>
                     </table>
-              </div>
+                  </div>
                   
                   {/* Mobile Card Layout */}
                   <div className="md:hidden space-y-4">
-                    {bookings.length === 0 ? (
-                      <div className="text-center py-8 text-slate-400">No bookings found.</div>
-                    ) : (
-                      bookings.map(booking => {
+                    {(() => {
+                      // Filter bookings based on search query
+                      const filteredBookings = bookings.filter(booking =>
+                        booking.buyerName.toLowerCase().includes(searchQuery.toLowerCase()) ||
+                        booking.buyerEmail.toLowerCase().includes(searchQuery.toLowerCase())
+                      );
+
+                      if (filteredBookings.length === 0) {
+                        return (
+                          <div className="text-center py-8 text-slate-400">
+                            {searchQuery ? 'No bookings found matching your search.' : 'No bookings found.'}
+                          </div>
+                        );
+                      }
+
+                      return filteredBookings.map(booking => {
                         const event = events.find(e => e.id === booking.eventId);
+                        const tickets = ticketDetails[booking.id] || [];
+                        const scannedTickets = tickets.filter(ticket => ticket.isScanned);
+                        const allScanned = tickets.length > 0 && scannedTickets.length === tickets.length;
+
                         return (
                           <Card key={booking.id} className="overflow-hidden">
                             <CardContent className="p-4">
                               <div className="space-y-3">
                                 <div className="flex items-center justify-between">
                                   <span className="text-sm font-medium text-slate-500">Booking #{booking.id}</span>
-                                  <span className="text-sm font-bold text-slate-900">${booking.totalPrice.toFixed(2)}</span>
+                                  <span className="text-sm font-bold text-slate-900">KSH {booking.totalPrice.toFixed(2)}</span>
                                 </div>
                                 <div>
                                   <h3 className="font-medium text-slate-900 mb-1">
@@ -1753,15 +1844,22 @@ export default function AdminPage() {
                                     {booking.paymentStatus}
                                   </Badge>
                                 </div>
-                                <div className="mt-2">
-                                  <p className="text-xs text-slate-500">Tickets: {booking.ticketQuantity}</p>
+                                <div className="flex items-center gap-2 mt-2">
+                                  <Checkbox 
+                                    checked={scannedTickets.length > 0}
+                                    disabled={tickets.length === 0}
+                                    className="data-[state=checked]:bg-green-600 data-[state=checked]:border-green-600"
+                                  />
+                                  <span className="text-xs text-slate-500">
+                                    Attendance: {tickets.length > 0 ? `${scannedTickets.length}/${tickets.length}` : 'No tickets'}
+                                  </span>
                                 </div>
                               </div>
                             </CardContent>
                           </Card>
                         );
-                      })
-                    )}
+                      });
+                    })()}
                   </div>
                 </CardContent>
               </Card>
@@ -1832,6 +1930,8 @@ export default function AdminPage() {
                               title: "✅ Attendance Marked!",
                               description: `${data.ticket.buyerName} - Ticket ${data.ticket.ticketNumber} - ${data.ticket.eventTitle}`,
                             });
+                            // Update attendance status in the bookings table
+                            updateAttendanceAfterScan(data.ticket);
                           } else {
                             toast({
                               title: "❌ Scan Error",

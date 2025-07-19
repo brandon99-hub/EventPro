@@ -130,7 +130,7 @@ export default function CalendarPage() {
           <div className="flex justify-between h-16 sm:h-20 items-center">
             <div className="flex items-center gap-4 sm:gap-8">
               <Link href="/">
-                <span className="text-primary text-2xl sm:text-3xl font-extrabold tracking-tight cursor-pointer drop-shadow-sm">EventHub</span>
+                <span className="text-primary text-2xl sm:text-3xl font-extrabold tracking-tight cursor-pointer drop-shadow-sm">StarEvents</span>
               </Link>
               <nav className="hidden sm:flex sm:space-x-4 items-center">
                 <Link href="/events">
@@ -418,7 +418,7 @@ export default function CalendarPage() {
         <div className="max-w-7xl mx-auto py-12 px-4 sm:px-6 lg:px-8">
           <div className="md:grid md:grid-cols-4 md:gap-8">
             <div>
-              <h3 className="text-2xl font-bold">EventHub</h3>
+                                <h3 className="text-2xl font-bold">StarEvents</h3>
               <p className="mt-4 text-slate-300">
                 The easiest way to discover and book tickets for your favorite events.
               </p>
@@ -447,15 +447,24 @@ export default function CalendarPage() {
             <div>
               <h3 className="text-lg font-semibold mb-4 mt-8 md:mt-0">Contact</h3>
               <ul className="space-y-2">
-                <li className="text-slate-300">support@eventhub.com</li>
-                <li className="text-slate-300">+1 (555) 123-4567</li>
+                <li><a href="mailto:support@starevents.com" className="text-slate-300 hover:text-white transition-colors">support@starevents.com</a></li>
+                <li><a href="tel:+254741991213" className="text-slate-300 hover:text-white transition-colors">+254 741 991 213</a></li>
               </ul>
             </div>
           </div>
           <div className="mt-12 pt-8 border-t border-slate-700">
-            <p className="text-slate-400 text-center">
-              &copy; 2023 EventHub, Inc. All rights reserved.
-            </p>
+            <div className="flex items-center justify-center gap-3">
+              <img 
+                src="/workingwavewhitelogo.jpg" 
+                alt="Working Wave Logo" 
+                className="h-6 w-auto opacity-80 hover:opacity-100 transition-opacity"
+              />
+              <p className="text-slate-400 text-center">
+                <a href="https://working-wave.vercel.app/" target="_blank" rel="noopener noreferrer" className="hover:text-white transition-colors">
+                  Working Wave © 2025. All Right Reserved.
+                </a>
+              </p>
+            </div>
           </div>
         </div>
       </footer>

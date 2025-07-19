@@ -84,7 +84,7 @@ export default function EventDetailsPage() {
           <div className="flex justify-between h-16 sm:h-20 items-center">
             <div className="flex items-center gap-4 sm:gap-8">
               <Link href="/">
-                <span className="text-primary text-2xl sm:text-3xl font-extrabold tracking-tight cursor-pointer drop-shadow-sm">EventHub</span>
+                <span className="text-primary text-2xl sm:text-3xl font-extrabold tracking-tight cursor-pointer drop-shadow-sm">StarEvents</span>
               </Link>
               <nav className="hidden sm:flex sm:space-x-4 items-center">
                 <Link href="/events">

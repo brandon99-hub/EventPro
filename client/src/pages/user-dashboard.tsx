@@ -75,7 +75,7 @@ export default function UserDashboard() {
             <div className="flex items-center">
               <Link href="/">
                 <div className="flex-shrink-0 flex items-center cursor-pointer">
-                  <span className="text-primary text-xl sm:text-2xl font-bold">EventHub</span>
+                  <span className="text-primary text-xl sm:text-2xl font-bold">StarEvents</span>
                 </div>
               </Link>
             </div>
