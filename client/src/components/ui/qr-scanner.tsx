@@ -18,18 +18,31 @@ export function QRScanner({ onScan, onError, isScanning, onToggleScanning }: QRS
   const [errorMessage, setErrorMessage] = useState<string>('');
   const [availableCameras, setAvailableCameras] = useState<MediaDeviceInfo[]>([]);
   const [selectedCamera, setSelectedCamera] = useState<string>('');
+  const [retryCount, setRetryCount] = useState(0);
+  const [isHttps, setIsHttps] = useState(true);
+
+  // Check if running on HTTPS
+  useEffect(() => {
+    setIsHttps(window.location.protocol === 'https:' || window.location.hostname === 'localhost');
+  }, []);
 
   // Get available cameras on component mount
   useEffect(() => {
     const getCameras = async () => {
       try {
         if (navigator.mediaDevices && navigator.mediaDevices.enumerateDevices) {
-          // First request permission to get camera labels
+          // Request basic camera permission first to get labeled devices
           try {
-            await navigator.mediaDevices.getUserMedia({ video: true });
+            const stream = await navigator.mediaDevices.getUserMedia({ 
+              video: { 
+                width: { ideal: 1280 },
+                height: { ideal: 720 }
+              } 
+            });
+            // Stop the stream immediately after getting permission
+            stream.getTracks().forEach(track => track.stop());
           } catch (error) {
-            // Permission denied, but we can still enumerate devices
-            console.log('Camera permission not granted yet');
+            console.log('Initial camera permission not granted');
           }
           
           const devices = await navigator.mediaDevices.enumerateDevices();
@@ -64,29 +77,10 @@ export function QRScanner({ onScan, onError, isScanning, onToggleScanning }: QRS
         throw new Error('Camera access is not supported in this browser');
       }
 
-      // Request camera permissions with specific camera if selected
-      const constraints = selectedCamera 
-        ? { video: { deviceId: { exact: selectedCamera } } }
-        : { video: true };
-
-      try {
-        await navigator.mediaDevices.getUserMedia(constraints);
-      } catch (permissionError: any) {
-        console.error('Camera permission denied:', permissionError);
-        
-        if (permissionError.name === 'NotAllowedError') {
-          setScanStatus('permission-denied');
-          setErrorMessage('Camera access was denied. Please allow camera permissions in your browser settings.');
-        } else if (permissionError.name === 'NotFoundError') {
-          setScanStatus('error');
-          setErrorMessage('No camera found. Please check your device has a working camera.');
-        } else if (permissionError.name === 'NotReadableError') {
-          setScanStatus('error');
-          setErrorMessage('Camera is already in use by another application. Please close other apps using the camera.');
-        } else {
-          setScanStatus('error');
-          setErrorMessage(`Camera error: ${permissionError.message || 'Unknown error occurred'}`);
-        }
+      // Check HTTPS requirement
+      if (!isHttps) {
+        setScanStatus('error');
+        setErrorMessage('Camera access requires HTTPS. Please use a secure connection.');
         return;
       }
 
@@ -96,19 +90,47 @@ export function QRScanner({ onScan, onError, isScanning, onToggleScanning }: QRS
         scannerRef.current = null;
       }
 
-      // Create new scanner with better mobile configuration
+      // Create scanner with flexible camera configuration
+      const scannerConfig: any = {
+        fps: 10,
+        qrbox: { width: 250, height: 250 },
+        aspectRatio: 1.0,
+        supportedScanTypes: [Html5QrcodeScanType.SCAN_TYPE_CAMERA],
+        showTorchButtonIfSupported: true,
+        showZoomSliderIfSupported: true,
+        defaultZoomValueIfSupported: 1,
+        rememberLastUsedCamera: true,
+        // More flexible camera constraints
+        videoConstraints: {
+          width: { min: 640, ideal: 1280, max: 1920 },
+          height: { min: 480, ideal: 720, max: 1080 },
+          facingMode: { ideal: "environment" }, // Prefer back camera on mobile
+        }
+      };
+
+      // If specific camera is selected, try to use it but with fallback
+      if (selectedCamera && availableCameras.length > 1) {
+        try {
+          // Test if the selected camera is available
+          const testStream = await navigator.mediaDevices.getUserMedia({
+            video: { deviceId: { exact: selectedCamera } }
+          });
+          testStream.getTracks().forEach(track => track.stop());
+          
+          // If successful, use the specific camera
+          scannerConfig.videoConstraints = {
+            ...scannerConfig.videoConstraints,
+            deviceId: { exact: selectedCamera }
+          };
+        } catch (error) {
+          console.warn('Selected camera not available, falling back to default');
+          // Fall back to default camera selection
+        }
+      }
+
       scannerRef.current = new Html5QrcodeScanner(
         "qr-reader",
-        { 
-          fps: 10, 
-          qrbox: { width: 200, height: 200 }, // Smaller for mobile
-          aspectRatio: 1.0,
-          supportedScanTypes: [Html5QrcodeScanType.SCAN_TYPE_CAMERA],
-          showTorchButtonIfSupported: true,
-          showZoomSliderIfSupported: true,
-          defaultZoomValueIfSupported: 1,
-          rememberLastUsedCamera: true,
-        },
+        scannerConfig,
         false
       );
 
@@ -116,6 +138,7 @@ export function QRScanner({ onScan, onError, isScanning, onToggleScanning }: QRS
         (decodedText) => {
           setScanResult(decodedText);
           setScanStatus('success');
+          setRetryCount(0); // Reset retry count on success
           onScan(decodedText);
           
           // Stop scanning after successful scan
@@ -125,22 +148,94 @@ export function QRScanner({ onScan, onError, isScanning, onToggleScanning }: QRS
         },
         (errorMessage) => {
           console.error('QR scan error:', errorMessage);
-          // Don't show every minor error, only significant ones
+          
+          // Handle specific error types
           if (errorMessage.includes('NotFound') || errorMessage.includes('NotReadable')) {
             setScanStatus('error');
-            setErrorMessage(errorMessage);
+            setErrorMessage(`Camera error: ${errorMessage}. Please try again or check camera permissions.`);
             if (onError) {
               onError(errorMessage);
             }
+          } else if (errorMessage.includes('NotAllowed')) {
+            setScanStatus('permission-denied');
+            setErrorMessage('Camera access was denied. Please allow camera permissions and try again.');
           }
         }
       );
 
       setScanStatus('scanning');
-    } catch (error) {
+    } catch (error: any) {
       console.error('Failed to start QR scanner:', error);
       setScanStatus('error');
-      setErrorMessage(error instanceof Error ? error.message : 'Failed to start scanner');
+      
+      // Provide more specific error messages
+      if (error.name === 'NotAllowedError') {
+        setErrorMessage('Camera access was denied. Please allow camera permissions in your browser settings.');
+        setScanStatus('permission-denied');
+      } else if (error.name === 'NotFoundError') {
+        setErrorMessage('No camera found. Please check your device has a working camera.');
+      } else if (error.name === 'NotReadableError') {
+        setErrorMessage('Camera is already in use by another application. Please close other apps using the camera and try again.');
+      } else if (error.name === 'OverconstrainedError') {
+        setErrorMessage('Camera configuration not supported. Trying with different settings...');
+        // Try with more basic constraints
+        setTimeout(() => {
+          if (retryCount < 2) {
+            setRetryCount(prev => prev + 1);
+            startScannerWithBasicConstraints();
+          }
+        }, 1000);
+      } else {
+        setErrorMessage(`Camera error: ${error.message || 'Unknown error occurred'}`);
+      }
+    }
+  };
+
+  const startScannerWithBasicConstraints = async () => {
+    try {
+      if (scannerRef.current) {
+        scannerRef.current.clear();
+        scannerRef.current = null;
+      }
+
+      // Use very basic constraints
+      scannerRef.current = new Html5QrcodeScanner(
+        "qr-reader",
+        {
+          fps: 10,
+          qrbox: { width: 200, height: 200 },
+          aspectRatio: 1.0,
+          supportedScanTypes: [Html5QrcodeScanType.SCAN_TYPE_CAMERA],
+          showTorchButtonIfSupported: true,
+          videoConstraints: {
+            width: { min: 320, ideal: 640 },
+            height: { min: 240, ideal: 480 },
+            facingMode: "environment"
+          }
+        },
+        false
+      );
+
+      scannerRef.current.render(
+        (decodedText) => {
+          setScanResult(decodedText);
+          setScanStatus('success');
+          setRetryCount(0);
+          onScan(decodedText);
+          setTimeout(() => onToggleScanning(), 2000);
+        },
+        (errorMessage) => {
+          console.error('QR scan error (basic constraints):', errorMessage);
+          setScanStatus('error');
+          setErrorMessage(`Scanner error: ${errorMessage}`);
+        }
+      );
+
+      setScanStatus('scanning');
+    } catch (error) {
+      console.error('Failed to start scanner with basic constraints:', error);
+      setScanStatus('error');
+      setErrorMessage('Failed to initialize camera. Please check permissions and try again.');
     }
   };
 
@@ -152,13 +247,38 @@ export function QRScanner({ onScan, onError, isScanning, onToggleScanning }: QRS
     setScanStatus('idle');
     setScanResult(null);
     setErrorMessage('');
+    setRetryCount(0);
   };
 
   const handleRetry = () => {
     setScanStatus('idle');
     setErrorMessage('');
+    setRetryCount(0);
     if (isScanning) {
       onToggleScanning();
+    }
+  };
+
+  const requestCameraPermission = async () => {
+    try {
+      const stream = await navigator.mediaDevices.getUserMedia({ 
+        video: { 
+          width: { ideal: 1280 },
+          height: { ideal: 720 }
+        } 
+      });
+      stream.getTracks().forEach(track => track.stop());
+      return true;
+    } catch (error: any) {
+      console.error('Camera permission request failed:', error);
+      if (error.name === 'NotAllowedError') {
+        setScanStatus('permission-denied');
+        setErrorMessage('Camera access was denied. Please allow camera permissions in your browser settings.');
+      } else {
+        setScanStatus('error');
+        setErrorMessage(`Camera error: ${error.message}`);
+      }
+      return false;
     }
   };
 
@@ -180,6 +300,21 @@ export function QRScanner({ onScan, onError, isScanning, onToggleScanning }: QRS
           Scan ticket QR codes to mark attendance
         </p>
       </div>
+
+      {/* HTTPS Warning */}
+      {!isHttps && (
+        <div className="mb-4 bg-amber-50 border border-amber-200 rounded-lg p-4">
+          <div className="flex items-start gap-3">
+            <AlertTriangleIcon className="h-5 w-5 text-amber-600 flex-shrink-0 mt-0.5" />
+            <div className="flex-1">
+              <h4 className="font-medium text-amber-800 mb-1">HTTPS Required</h4>
+              <p className="text-sm text-amber-700">
+                Camera access requires a secure connection (HTTPS). Please use a secure URL.
+              </p>
+            </div>
+          </div>
+        </div>
+      )}
 
       {/* Camera Selection (if multiple cameras) */}
       {availableCameras.length > 1 && (
@@ -216,6 +351,7 @@ export function QRScanner({ onScan, onError, isScanning, onToggleScanning }: QRS
               onClick={onToggleScanning} 
               className="w-full h-12 text-base font-medium"
               size="lg"
+              disabled={!isHttps}
             >
               <CameraIcon className="h-5 w-5 mr-2" />
               Start Scanning
@@ -233,6 +369,9 @@ export function QRScanner({ onScan, onError, isScanning, onToggleScanning }: QRS
                   <div className="text-center text-white">
                     <div className="animate-spin h-8 w-8 border-2 border-white border-t-transparent rounded-full mx-auto mb-2"></div>
                     <p className="text-sm">Initializing camera...</p>
+                    {retryCount > 0 && (
+                      <p className="text-xs mt-1">Retry attempt {retryCount}</p>
+                    )}
                   </div>
                 </div>
               )}
@@ -267,15 +406,26 @@ export function QRScanner({ onScan, onError, isScanning, onToggleScanning }: QRS
                       <p>• Allow camera access when prompted</p>
                       <p>• Refresh the page and try again</p>
                     </div>
-                    <Button 
-                      onClick={handleRetry} 
-                      variant="outline" 
-                      size="sm"
-                      className="mt-3 w-full"
-                    >
-                      <RefreshCwIcon className="h-4 w-4 mr-2" />
-                      Try Again
-                    </Button>
+                    <div className="flex gap-2 mt-3">
+                      <Button 
+                        onClick={requestCameraPermission} 
+                        variant="outline" 
+                        size="sm"
+                        className="flex-1"
+                      >
+                        <CameraIcon className="h-4 w-4 mr-2" />
+                        Request Permission
+                      </Button>
+                      <Button 
+                        onClick={handleRetry} 
+                        variant="outline" 
+                        size="sm"
+                        className="flex-1"
+                      >
+                        <RefreshCwIcon className="h-4 w-4 mr-2" />
+                        Try Again
+                      </Button>
+                    </div>
                   </div>
                 </div>
               </div>
@@ -296,16 +446,32 @@ export function QRScanner({ onScan, onError, isScanning, onToggleScanning }: QRS
                       <p>• Hold the camera steady</p>
                       <p>• Try adjusting the lighting</p>
                       <p>• Check if camera is being used by another app</p>
+                      {retryCount > 0 && (
+                        <p>• Retry attempts: {retryCount}/2</p>
+                      )}
                     </div>
-                    <Button 
-                      onClick={handleRetry} 
-                      variant="outline" 
-                      size="sm"
-                      className="mt-3 w-full"
-                    >
-                      <RefreshCwIcon className="h-4 w-4 mr-2" />
-                      Try Again
-                    </Button>
+                    <div className="flex gap-2 mt-3">
+                      <Button 
+                        onClick={handleRetry} 
+                        variant="outline" 
+                        size="sm"
+                        className="flex-1"
+                      >
+                        <RefreshCwIcon className="h-4 w-4 mr-2" />
+                        Try Again
+                      </Button>
+                      {retryCount < 2 && (
+                        <Button 
+                          onClick={startScannerWithBasicConstraints} 
+                          variant="outline" 
+                          size="sm"
+                          className="flex-1"
+                        >
+                          <SettingsIcon className="h-4 w-4 mr-2" />
+                          Basic Mode
+                        </Button>
+                      )}
+                    </div>
                   </div>
                 </div>
               </div>

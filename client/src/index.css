@@ -54,7 +54,7 @@
     @apply w-full;
   }
   
-  /* Mobile touch improvements */
+  /* Enhanced Mobile touch improvements */
   @media (max-width: 768px) {
     #qr-reader__dashboard_section_csr button {
       @apply min-h-[44px] text-base;
@@ -66,6 +66,44 @@
     
     #qr-reader__torch_button {
       @apply min-h-[44px] text-base;
+    }
+    
+    /* Better mobile camera handling */
+    #qr-reader__scan_region {
+      @apply min-h-[300px];
+    }
+    
+    #qr-reader__scan_region video {
+      @apply object-cover;
+    }
+    
+    /* Improve scanner UI on mobile */
+    #qr-reader__dashboard {
+      @apply p-3;
+    }
+    
+    #qr-reader__dashboard_section {
+      @apply mb-3;
+    }
+    
+    /* Better error handling display */
+    #qr-reader__dashboard_section_csr {
+      @apply gap-3;
+    }
+  }
+  
+  /* Dark mode support for scanner */
+  @media (prefers-color-scheme: dark) {
+    #qr-reader__dashboard {
+      @apply bg-slate-800 text-white;
+    }
+    
+    #qr-reader__camera_button {
+      @apply bg-primary text-white;
+    }
+    
+    #qr-reader__torch_button {
+      @apply bg-slate-700 text-slate-200;
     }
   }
 }
