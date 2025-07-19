@@ -80,13 +80,16 @@ export default function CheckoutPage() {
       // If M-Pesa payment, initiate STK Push
       if (form.getValues("paymentMethod") === "mpesa") {
         initiateMpesaPayment(booking);
+      } else if (form.getValues("paymentMethod") === "card") {
+        // For Pesapal card payments
+        initiatePesapalPayment(booking);
       } else {
-        // For card payments, you would redirect to payment gateway
+        // For other payment methods
         setCurrentStep("success");
-      toast({
-        title: "Booking successful!",
-        description: "Your tickets have been booked successfully.",
-      });
+        toast({
+          title: "Booking successful!",
+          description: "Your tickets have been booked successfully.",
+        });
       }
     },
     onError: (error: any) => {
@@ -98,6 +101,94 @@ export default function CheckoutPage() {
       });
     },
   });
+
+  // Initiate Pesapal payment
+  const initiatePesapalPayment = async (booking: any) => {
+    setCurrentStep("processing");
+    setPaymentStatus("Initiating Pesapal payment...");
+
+    try {
+      const response = await paymentService.initiatePesapalPayment({
+        amount: totalPrice,
+        reference: `BOOKING-${booking.id}`,
+        description: `Payment for ${event?.title} - ${booking.ticketQuantity} ticket(s)`,
+        buyerName: form.getValues("buyerName"),
+        buyerEmail: form.getValues("buyerEmail"),
+        buyerPhone: form.getValues("buyerPhone"),
+        currency: 'KES'
+      });
+
+      if (response.success && response.checkoutUrl) {
+        setPaymentStatus("Redirecting to Pesapal...");
+        
+        // Open Pesapal checkout in a new window/tab
+        const pesapalWindow = window.open(response.checkoutUrl, '_blank', 'width=800,height=600');
+        
+        if (pesapalWindow) {
+          // Start polling for payment status
+          const pollInterval = setInterval(async () => {
+            try {
+              const statusResponse = await paymentService.checkPesapalPaymentStatus(response.orderTrackingId!);
+              
+              if (statusResponse.success && statusResponse.status === 'completed') {
+                clearInterval(pollInterval);
+                pesapalWindow.close();
+                setCurrentStep("success");
+                toast({
+                  title: "Payment confirmed!",
+                  description: "Your payment has been processed successfully.",
+                });
+              } else if (statusResponse.success && statusResponse.status === 'failed') {
+                clearInterval(pollInterval);
+                pesapalWindow.close();
+                setCurrentStep("failed");
+                toast({
+                  title: "Payment failed",
+                  description: statusResponse.errorMessage || "Payment was not completed",
+                  variant: "destructive",
+                });
+              }
+            } catch (error) {
+              console.error("Status check failed:", error);
+            }
+          }, 5000); // Poll every 5 seconds
+
+          // Stop polling after 10 minutes
+          setTimeout(() => {
+            clearInterval(pollInterval);
+            if (currentStep === "processing") {
+              pesapalWindow.close();
+              setCurrentStep("failed");
+              toast({
+                title: "Payment timeout",
+                description: "Payment took too long. Please try again.",
+                variant: "destructive",
+              });
+            }
+          }, 600000);
+        } else {
+          // If popup blocked, redirect in same window
+          setPaymentStatus("Redirecting to payment page...");
+          window.location.href = response.checkoutUrl;
+        }
+      } else {
+        setCurrentStep("failed");
+        toast({
+          title: "Payment initiation failed",
+          description: response.errorMessage || "Failed to initiate payment",
+          variant: "destructive",
+        });
+      }
+    } catch (error) {
+      console.error("Pesapal payment initiation failed:", error);
+      setCurrentStep("failed");
+      toast({
+        title: "Payment failed",
+        description: "An error occurred during payment",
+        variant: "destructive",
+      });
+    }
+  };
 
   // Initiate M-Pesa payment
   const initiateMpesaPayment = async (booking: any) => {

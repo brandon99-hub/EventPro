@@ -1798,15 +1798,28 @@ export default function AdminPage() {
                   </div>
                 </div>
               ) : (
-                <div className="space-y-6 p-4">
-                  <div className="text-center">
-                    <h3 className="text-xl font-medium mb-2">Scan Ticket QR Codes</h3>
-                    <p className="text-slate-500">
-                      Use your camera to scan QR codes from tickets to mark attendance
-                    </p>
+                <div className="min-h-screen bg-slate-50">
+                  {/* Mobile Header */}
+                  <div className="bg-white border-b border-slate-200 px-4 py-3">
+                    <div className="flex items-center justify-between">
+                      <div>
+                        <h1 className="text-lg font-semibold text-slate-900">QR Scanner</h1>
+                        <p className="text-sm text-slate-500">Scan ticket QR codes</p>
+                      </div>
+                      <div className="flex items-center gap-2">
+                        <Button
+                          variant="outline"
+                          size="sm"
+                          onClick={() => setActiveTab("events")}
+                        >
+                          Back to Admin
+                        </Button>
+                      </div>
+                    </div>
                   </div>
-                  
-                  <div className="max-w-md mx-auto">
+
+                  {/* Scanner Content */}
+                  <div className="p-4">
                     <QRScanner
                       onScan={async (result) => {
                         setScannedResult(result);
@@ -1816,19 +1829,19 @@ export default function AdminPage() {
                           
                           if (response.ok) {
                             toast({
-                              title: "Attendance Marked!",
+                              title: "✅ Attendance Marked!",
                               description: `${data.ticket.buyerName} - Ticket ${data.ticket.ticketNumber} - ${data.ticket.eventTitle}`,
                             });
                           } else {
                             toast({
-                              title: "Scan Error",
+                              title: "❌ Scan Error",
                               description: data.message,
                               variant: "destructive",
                             });
                           }
                         } catch (error) {
                           toast({
-                            title: "Scan Failed",
+                            title: "❌ Scan Failed",
                             description: "Failed to process QR code",
                             variant: "destructive",
                           });
@@ -1837,7 +1850,7 @@ export default function AdminPage() {
                       onError={(error) => {
                         console.error('QR scan error:', error);
                         toast({
-                          title: "Scanner Error",
+                          title: "⚠️ Scanner Error",
                           description: error,
                           variant: "destructive",
                         });
@@ -1847,17 +1860,22 @@ export default function AdminPage() {
                     />
                   </div>
                   
+                  {/* Last Scanned Result */}
                   {scannedResult && (
-                    <Card className="max-w-md mx-auto">
-                      <CardHeader>
-                        <CardTitle>Last Scanned Result</CardTitle>
-                      </CardHeader>
-                      <CardContent>
-                        <p className="text-sm font-mono bg-slate-100 p-3 rounded break-all">
-                          {scannedResult}
-                        </p>
-                      </CardContent>
-                    </Card>
+                    <div className="p-4">
+                      <Card className="max-w-sm mx-auto">
+                        <CardHeader className="pb-3">
+                          <CardTitle className="text-base">Last Scanned Result</CardTitle>
+                        </CardHeader>
+                        <CardContent>
+                          <div className="bg-slate-50 rounded-lg p-3">
+                            <p className="text-xs font-mono break-all text-slate-700">
+                              {scannedResult}
+                            </p>
+                          </div>
+                        </CardContent>
+                      </Card>
+                    </div>
                   )}
                 </div>
               )}

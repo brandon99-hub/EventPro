@@ -9,6 +9,7 @@ import { z } from "zod";
 import { storage } from "./storage";
 import { insertUserSchema, insertEventSchema, insertBookingSchema, insertCategorySchema } from "@shared/schema";
 import { mpesaService } from "./services/mpesa";
+import { pesapalService } from "./services/pesapal";
 import { commissionService } from "./services/commission";
 import { mpesaPayoutService } from "./mpesa-payout";
 import { pdfService } from "./services/pdf";
@@ -749,6 +750,238 @@ export async function registerRoutes(app: Express): Promise<Server> {
     } catch (error) {
       console.error('Webhook processing failed:', error);
       res.status(500).json({ ResultCode: 1, ResultDesc: "Failed" });
+    }
+  });
+
+  // Pesapal payment routes
+  app.post("/api/payments/pesapal/initiate", async (req, res) => {
+    try {
+      const { amount, reference, description, buyerName, buyerEmail, buyerPhone, currency } = req.body;
+
+      // Validate input
+      if (!amount || !reference || !description || !buyerName || !buyerEmail || !buyerPhone) {
+        return res.status(400).json({
+          success: false,
+          errorCode: 'VALIDATION_ERROR',
+          errorMessage: "Missing required fields"
+        });
+      }
+
+      // Create Pesapal order
+      const result = await pesapalService.createOrder({
+        amount,
+        reference,
+        description,
+        buyerName,
+        buyerEmail,
+        buyerPhone,
+        currency: currency || 'KES',
+        callbackUrl: `${req.protocol}://${req.get('host')}/api/payments/pesapal/callback`
+      });
+
+      if (result.success && result.orderTrackingId) {
+        // Update booking with payment reference
+        const bookingId = parseInt(reference.replace('BOOKING-', ''));
+        try {
+          await storage.updateBooking(bookingId, {
+            paymentReference: result.orderTrackingId,
+            paymentMethod: 'pesapal'
+          });
+        } catch (updateError) {
+          console.error("Failed to update booking:", updateError);
+        }
+        
+        res.json({
+          success: true,
+          orderTrackingId: result.orderTrackingId,
+          checkoutUrl: result.checkoutUrl
+        });
+      } else {
+        res.status(400).json({
+          success: false,
+          errorCode: result.errorCode || 'UNKNOWN_ERROR',
+          errorMessage: result.errorMessage || 'Payment initiation failed'
+        });
+      }
+    } catch (error) {
+      console.error("Pesapal payment initiation error:", error instanceof Error ? error.message : String(error));
+      res.status(500).json({
+        success: false,
+        errorCode: 'INTERNAL_ERROR',
+        errorMessage: "Failed to initiate payment"
+      });
+    }
+  });
+
+  app.get("/api/payments/pesapal/status/:orderTrackingId", async (req, res) => {
+    try {
+      const { orderTrackingId } = req.params;
+      
+      // First, check if we have a booking with this order tracking ID
+      const bookings = await storage.getBookings();
+      const booking = bookings.find((b: any) => b.paymentReference === orderTrackingId);
+      
+      if (booking && booking.paymentStatus === 'completed') {
+        // Payment was already completed via webhook
+        return res.json({
+          success: true,
+          status: 'completed',
+          transactionId: booking.paymentReference,
+          amount: booking.totalPrice
+        });
+      }
+      
+      // If booking exists but payment is still pending, return pending status
+      if (booking && booking.paymentStatus === 'pending') {
+        return res.json({
+          success: true,
+          status: 'pending',
+          message: 'Payment is being processed. Please check your email for confirmation.'
+        });
+      }
+      
+      // If not found in database, try Pesapal API
+      try {
+        const result = await pesapalService.checkPaymentStatus(orderTrackingId);
+        res.json(result);
+      } catch (pesapalError) {
+        console.log('Pesapal API error, returning pending status');
+        res.json({
+          success: true,
+          status: 'pending',
+          message: 'Payment is being processed. Please check your email for confirmation.'
+        });
+      }
+    } catch (error) {
+      console.error('Pesapal payment status check failed:', error);
+      res.status(500).json({ message: "Failed to check payment status" });
+    }
+  });
+
+  app.post("/api/payments/pesapal/callback", async (req, res) => {
+    try {
+      console.log('📥 Pesapal webhook received at:', new Date().toISOString());
+      console.log('📥 Pesapal webhook body:', JSON.stringify(req.body, null, 2));
+      
+      const result = pesapalService.processWebhook(req.body);
+      console.log('🔍 Pesapal webhook processing result:', result);
+
+      if (result.success) {
+        // Find booking by order tracking ID
+        const bookings = await storage.getBookings();
+        const booking = bookings.find((b: any) => b.paymentReference === result.orderTrackingId);
+        
+        if (booking) {
+          const bookingId = booking.id;
+          console.log(`Processing Pesapal payment for booking ${bookingId}`);
+          
+          try {
+            await commissionService.processPaymentCompletion(
+              bookingId,
+              'pesapal',
+              result.transactionId || result.orderTrackingId || '',
+              result.transactionId,
+              undefined // phoneNumber parameter for Pesapal
+            );
+
+            // Generate PDF receipt and send email (same as M-Pesa)
+            try {
+              const bookingData = await storage.getBooking(bookingId);
+              const event = bookingData ? await storage.getEvent(bookingData.eventId) : null;
+              
+              if (bookingData && event) {
+                // Generate QR codes for tickets
+                const tickets = [];
+                for (let i = 1; i <= bookingData.ticketQuantity; i++) {
+                  const qrCode = `TICKET-${bookingData.id}-${i}-${Date.now()}-${Math.random().toString(36).substr(2, 9)}`;
+                  const ticket = await storage.createTicket({
+                    bookingId: bookingData.id,
+                    eventId: bookingData.eventId,
+                    ticketNumber: i,
+                    qrCode,
+                    isScanned: false,
+                    attendanceStatus: 'not_attended'
+                  });
+                  tickets.push(ticket);
+                }
+
+                // Generate PDF receipt
+                const pdfReceipt = await pdfService.generateTicketReceipt({
+                  booking: bookingData,
+                  event,
+                  tickets
+                });
+                
+                // Send confirmation email with PDF
+                await sendEmail(
+                  bookingData.buyerEmail,
+                  `Payment Confirmed - ${event.title}`,
+                  `
+                    <h2>Payment Confirmed!</h2>
+                    <p>Dear ${bookingData.buyerName},</p>
+                    <p>Your payment of KES ${bookingData.totalPrice} has been successfully processed.</p>
+                    <h3>Booking Details:</h3>
+                    <ul>
+                      <li><strong>Event:</strong> ${event.title}</li>
+                      <li><strong>Date:</strong> ${new Date(event.date).toLocaleString()}</li>
+                      <li><strong>Venue:</strong> ${event.venue}, ${event.location}</li>
+                      <li><strong>Tickets:</strong> ${bookingData.ticketQuantity}</li>
+                      <li><strong>Total Paid:</strong> KES ${bookingData.totalPrice}</li>
+                      <li><strong>Transaction ID:</strong> ${result.transactionId}</li>
+                      <li><strong>Booking Reference:</strong> ${bookingData.id}</li>
+                    </ul>
+                    <p><strong>📎 Your ticket receipt is attached to this email.</strong></p>
+                    <p><strong>Important:</strong> Each ticket has a unique QR code. Please save the attached PDF and show the appropriate QR code at the entrance for each person attending. Each QR code can only be used once.</p>
+                    <p>Enjoy the event!</p>
+                    <hr />
+                    <small>This is an automated email from EventMasterPro.</small>
+                  `,
+                  [{
+                    filename: `ticket-receipt-${event.title.replace(/[^a-zA-Z0-9]/g, '-')}-${bookingData.id}.pdf`,
+                    content: pdfReceipt,
+                    contentType: 'application/pdf'
+                  }]
+                );
+                
+                console.log(`✅ PDF receipt sent for Pesapal booking ${bookingId}`);
+              }
+            } catch (pdfError) {
+              console.error(`❌ PDF generation failed for Pesapal booking ${bookingId}:`, pdfError);
+            }
+            
+            console.log(`Pesapal booking ${bookingId} completed`);
+          } catch (error) {
+            console.error(`Failed to update Pesapal booking ${bookingId}:`, error);
+          }
+        } else {
+          console.log('❌ No booking found with this order tracking ID');
+        }
+      } else {
+        // Payment failed - update booking status
+        console.log('Pesapal payment failed:', result.paymentStatus);
+        
+        const bookings = await storage.getBookings();
+        const booking = bookings.find((b: any) => b.paymentReference === result.orderTrackingId);
+        
+        if (booking) {
+          try {
+            await storage.updateBooking(booking.id, {
+              paymentStatus: 'failed',
+              paymentDate: new Date()
+            });
+            
+            console.log(`Pesapal booking ${booking.id} payment marked as failed`);
+          } catch (error) {
+            console.error(`Failed to update Pesapal booking ${booking.id} status:`, error);
+          }
+        }
+      }
+      
+      // Always respond with success to Pesapal
+      res.json({ success: true });
+    } catch (error) {
+      console.error('Pesapal webhook processing failed:', error);
+      res.status(500).json({ success: false });
     }
   });
 

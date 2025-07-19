@@ -5,11 +5,30 @@ export interface PaymentRequest {
   description: string;
 }
 
+export interface PesapalPaymentRequest {
+  amount: number;
+  reference: string;
+  description: string;
+  buyerName: string;
+  buyerEmail: string;
+  buyerPhone: string;
+  currency: string;
+  callbackUrl: string;
+}
+
 export interface PaymentResponse {
   success: boolean;
   checkoutRequestID?: string;
   merchantRequestID?: string;
   customerMessage?: string;
+  errorCode?: string;
+  errorMessage?: string;
+}
+
+export interface PesapalPaymentResponse {
+  success: boolean;
+  checkoutUrl?: string;
+  orderTrackingId?: string;
   errorCode?: string;
   errorMessage?: string;
 }
@@ -55,6 +74,35 @@ class PaymentService {
     }
   }
 
+  async initiatePesapalPayment(request: PesapalPaymentRequest): Promise<PesapalPaymentResponse> {
+    try {
+      const response = await fetch(`${this.baseUrl}/pesapal/initiate`, {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+        },
+        credentials: 'include',
+        body: JSON.stringify(request),
+      });
+
+      if (!response.ok) {
+        const error = await response.json();
+        return {
+          success: false,
+          errorMessage: error.message || 'Failed to initiate Pesapal payment'
+        };
+      }
+
+      return await response.json();
+    } catch (error) {
+      console.error('Pesapal payment initiation failed:', error);
+      return {
+        success: false,
+        errorMessage: 'Network error occurred'
+      };
+    }
+  }
+
   async checkPaymentStatus(checkoutRequestID: string): Promise<PaymentStatusResponse> {
     try {
       const response = await fetch(`${this.baseUrl}/status/${checkoutRequestID}`, {
@@ -77,6 +125,36 @@ class PaymentService {
       return await response.json();
     } catch (error) {
       console.error('Payment status check failed:', error);
+      return {
+        success: false,
+        status: 'failed',
+        errorMessage: 'Network error occurred'
+      };
+    }
+  }
+
+  async checkPesapalPaymentStatus(orderTrackingId: string): Promise<PaymentStatusResponse> {
+    try {
+      const response = await fetch(`${this.baseUrl}/pesapal/status/${orderTrackingId}`, {
+        method: 'GET',
+        headers: {
+          'Content-Type': 'application/json',
+        },
+        credentials: 'include',
+      });
+
+      if (!response.ok) {
+        const error = await response.json();
+        return {
+          success: false,
+          status: 'failed',
+          errorMessage: error.message || 'Failed to check Pesapal payment status'
+        };
+      }
+
+      return await response.json();
+    } catch (error) {
+      console.error('Pesapal payment status check failed:', error);
       return {
         success: false,
         status: 'failed',

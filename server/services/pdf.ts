@@ -14,109 +14,154 @@ const styles = StyleSheet.create({
   page: {
     flexDirection: 'column',
     backgroundColor: '#ffffff',
-    padding: 30,
+    padding: 20,
+    fontFamily: 'Helvetica',
   },
   header: {
-    backgroundColor: '#667eea',
+    backgroundColor: '#1e40af',
     color: 'white',
-    padding: 20,
+    padding: 25,
     textAlign: 'center',
-    marginBottom: 20,
+    marginBottom: 25,
+    borderRadius: 8,
+    border: '2px solid #3b82f6',
   },
   title: {
-    fontSize: 24,
+    fontSize: 28,
     fontWeight: 'bold',
-    marginBottom: 5,
+    marginBottom: 8,
+    textTransform: 'uppercase',
+    letterSpacing: 1,
   },
   subtitle: {
-    fontSize: 14,
-    opacity: 0.9,
+    fontSize: 16,
+    opacity: 0.95,
+    fontWeight: '500',
   },
   section: {
-    marginBottom: 20,
-    padding: 15,
-    backgroundColor: '#f8f9fa',
-    borderRadius: 5,
+    marginBottom: 25,
+    padding: 20,
+    backgroundColor: '#f8fafc',
+    borderRadius: 8,
+    border: '1px solid #e2e8f0',
   },
   sectionTitle: {
-    fontSize: 16,
+    fontSize: 18,
     fontWeight: 'bold',
-    marginBottom: 10,
-    color: '#333',
+    marginBottom: 15,
+    color: '#1e293b',
+    textTransform: 'uppercase',
+    letterSpacing: 0.5,
   },
   row: {
     flexDirection: 'row',
     justifyContent: 'space-between',
-    marginBottom: 5,
+    marginBottom: 8,
+    paddingVertical: 4,
+    borderBottom: '1px solid #f1f5f9',
   },
   label: {
-    fontSize: 12,
-    color: '#666',
+    fontSize: 13,
+    color: '#64748b',
     fontWeight: 'bold',
+    flex: 1,
   },
   value: {
-    fontSize: 12,
-    color: '#333',
+    fontSize: 13,
+    color: '#1e293b',
+    fontWeight: '500',
+    flex: 1,
+    textAlign: 'right',
   },
   ticketSection: {
-    marginTop: 20,
+    marginTop: 25,
   },
   ticket: {
-    border: '1px solid #ddd',
-    padding: 15,
-    marginBottom: 15,
-    borderRadius: 5,
+    border: '2px solid #3b82f6',
+    padding: 20,
+    marginBottom: 20,
+    borderRadius: 10,
+    backgroundColor: '#ffffff',
+    shadow: '0 4px 6px rgba(0, 0, 0, 0.1)',
   },
   ticketTitle: {
-    fontSize: 14,
+    fontSize: 16,
     fontWeight: 'bold',
-    marginBottom: 10,
+    marginBottom: 15,
     textAlign: 'center',
+    color: '#1e40af',
+    textTransform: 'uppercase',
+    letterSpacing: 0.5,
   },
   qrCode: {
     textAlign: 'center',
-    marginVertical: 10,
+    marginVertical: 15,
     alignItems: 'center',
+    padding: 15,
+    backgroundColor: '#f8fafc',
+    borderRadius: 8,
+    border: '1px solid #e2e8f0',
   },
   qrImage: {
-    width: 80,
-    height: 80,
-    marginBottom: 5,
+    width: 100,
+    height: 100,
+    marginBottom: 10,
   },
   qrText: {
-    fontSize: 10,
-    color: '#666',
+    fontSize: 11,
+    color: '#475569',
     textAlign: 'center',
     marginTop: 5,
+    fontWeight: '500',
   },
   footer: {
-    marginTop: 30,
-    padding: 15,
-    backgroundColor: '#f8f9fa',
+    marginTop: 35,
+    padding: 20,
+    backgroundColor: '#1e293b',
     textAlign: 'center',
-    borderTop: '1px solid #ddd',
+    borderRadius: 8,
   },
   footerText: {
-    fontSize: 10,
-    color: '#666',
-    marginBottom: 3,
+    fontSize: 11,
+    color: '#cbd5e1',
+    marginBottom: 4,
+    fontWeight: '500',
   },
   important: {
-    backgroundColor: '#fff3cd',
-    border: '1px solid #ffeaa7',
-    padding: 10,
-    marginVertical: 10,
-    borderRadius: 3,
+    backgroundColor: '#fef3c7',
+    border: '2px solid #f59e0b',
+    padding: 15,
+    marginVertical: 15,
+    borderRadius: 8,
   },
   importantTitle: {
-    fontSize: 12,
+    fontSize: 14,
     fontWeight: 'bold',
-    color: '#856404',
-    marginBottom: 5,
+    color: '#92400e',
+    marginBottom: 8,
+    textTransform: 'uppercase',
+    letterSpacing: 0.5,
   },
   importantText: {
-    fontSize: 10,
-    color: '#856404',
+    fontSize: 11,
+    color: '#92400e',
+    marginBottom: 3,
+    fontWeight: '500',
+  },
+  divider: {
+    borderTop: '2px solid #e2e8f0',
+    marginVertical: 15,
+  },
+  statusBadge: {
+    backgroundColor: '#10b981',
+    color: 'white',
+    paddingHorizontal: 12,
+    paddingVertical: 4,
+    borderRadius: 15,
+    fontSize: 11,
+    fontWeight: 'bold',
+    textTransform: 'uppercase',
+    letterSpacing: 0.5,
   },
 });
 
@@ -149,6 +194,23 @@ export class PDFService {
       }))
     );
 
+    // Format dates for Nairobi timezone
+    const formatNairobiTime = (date: Date) => {
+      return new Intl.DateTimeFormat('en-US', {
+        timeZone: 'Africa/Nairobi',
+        year: 'numeric',
+        month: 'long',
+        day: 'numeric',
+        hour: '2-digit',
+        minute: '2-digit',
+        hour12: true
+      }).format(date);
+    };
+
+    const currentDate = formatNairobiTime(new Date());
+    const eventDate = formatNairobiTime(new Date(event.date));
+    const paymentDate = formatNairobiTime(new Date(booking.paymentDate || new Date()));
+
     // Create PDF document
     const MyDocument = () => (
       React.createElement(Document, null,
@@ -156,7 +218,7 @@ export class PDFService {
           // Header
           React.createElement(View, { style: styles.header },
             React.createElement(Text, { style: styles.title }, "🎫 Event Ticket Receipt"),
-            React.createElement(Text, { style: styles.subtitle }, `Payment Confirmed • ${new Date().toLocaleDateString()}`)
+            React.createElement(Text, { style: styles.subtitle }, `Payment Confirmed • ${currentDate}`)
           ),
 
           // Event Details
@@ -168,7 +230,7 @@ export class PDFService {
             ),
             React.createElement(View, { style: styles.row },
               React.createElement(Text, { style: styles.label }, "Date & Time:"),
-              React.createElement(Text, { style: styles.value }, new Date(event.date).toLocaleString())
+              React.createElement(Text, { style: styles.value }, eventDate)
             ),
             React.createElement(View, { style: styles.row },
               React.createElement(Text, { style: styles.label }, "Venue:"),
@@ -205,7 +267,7 @@ export class PDFService {
             ),
             React.createElement(View, { style: styles.row },
               React.createElement(Text, { style: styles.label }, "Total Amount:"),
-              React.createElement(Text, { style: styles.value }, `KES ${booking.totalPrice}`)
+              React.createElement(Text, { style: styles.value }, `KES ${booking.totalPrice.toFixed(2)}`)
             ),
             React.createElement(View, { style: styles.row },
               React.createElement(Text, { style: styles.label }, "Payment Method:"),
@@ -213,7 +275,11 @@ export class PDFService {
             ),
             React.createElement(View, { style: styles.row },
               React.createElement(Text, { style: styles.label }, "Payment Date:"),
-              React.createElement(Text, { style: styles.value }, new Date(booking.paymentDate || new Date()).toLocaleString())
+              React.createElement(Text, { style: styles.value }, paymentDate)
+            ),
+            React.createElement(View, { style: styles.row },
+              React.createElement(Text, { style: styles.label }, "Status:"),
+              React.createElement(Text, { style: styles.statusBadge }, "PAID")
             )
           ),
 
@@ -222,7 +288,9 @@ export class PDFService {
             React.createElement(Text, { style: styles.importantTitle }, "⚠️ Important Information"),
             React.createElement(Text, { style: styles.importantText }, "• Each ticket has a unique QR code that can only be used once"),
             React.createElement(Text, { style: styles.importantText }, "• Please save this receipt and show the appropriate QR code at the entrance"),
-            React.createElement(Text, { style: styles.importantText }, "• Keep this receipt as proof of payment")
+            React.createElement(Text, { style: styles.importantText }, "• Keep this receipt as proof of payment"),
+            React.createElement(Text, { style: styles.importantText }, "• Arrive at least 30 minutes before the event starts"),
+            React.createElement(Text, { style: styles.importantText }, "• This ticket is valid for entry only on the specified date and time")
           ),
 
           // Tickets
@@ -238,7 +306,8 @@ export class PDFService {
                   }) : null,
                   React.createElement(Text, { style: styles.qrText }, `QR Code: ${ticket.qrCode}`),
                   React.createElement(Text, { style: styles.qrText }, `Scan this code at the entrance`),
-                  React.createElement(Text, { style: styles.qrText }, `Valid for: ${event.title}`)
+                  React.createElement(Text, { style: styles.qrText }, `Valid for: ${event.title}`),
+                  React.createElement(Text, { style: styles.qrText }, `Event Date: ${eventDate}`)
                 )
               )
             )
@@ -248,7 +317,8 @@ export class PDFService {
           React.createElement(View, { style: styles.footer },
             React.createElement(Text, { style: styles.footerText }, "EventMasterPro - Your trusted event ticketing platform"),
             React.createElement(Text, { style: styles.footerText }, "Thank you for your purchase! Enjoy the event!"),
-            React.createElement(Text, { style: styles.footerText }, "This is an automated receipt. For support, contact admin@eventhub.com")
+            React.createElement(Text, { style: styles.footerText }, "This is an automated receipt. For support, contact admin@eventhub.com"),
+            React.createElement(Text, { style: styles.footerText }, "Generated in Nairobi, Kenya • All times are in East Africa Time (EAT)")
           )
         )
       )
